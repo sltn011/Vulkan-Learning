@@ -1,0 +1,19 @@
+# Binaries
+Binary/**
+Binary-Intermediate/**
+
+# Visual Studio files and folder
+.vs/
+**.sln
+**.vcxproj
+**.vcxproj.filters
+**.vcxproj.user
+
+# Log files
+**.log
+
+# Temp
+Sandbox/imgui.ini
+
+# TODO List
+TODO.txt
