@@ -6,6 +6,9 @@
 
 #include <vulkan/vulkan.h>
 
+// Utils
+#include <map>
+
 class VulkanApp
 {
 public:
@@ -20,7 +23,7 @@ private:
 
 private:
     // Vulkan-specific methods
-
+    //=========================================================================================================
     // VK_INSTANCE_RELATED
     void CreateVkInstance(); // Set up VulkanAPI
     void DestroyVkInstance();
@@ -37,7 +40,20 @@ private:
     void LogSupportedExtensions() const;
     void LogSupportedValidationLayers() const;
     // !VK_INSTANCE_RELATED
+    //=========================================================================================================
+    // VK_PHYSICAL_DEVICE
+    void SelectPhysicalDevice();
 
+    std::vector<VkPhysicalDevice> GetPhysicalDevices() const;
+    VkPhysicalDeviceProperties    GetPhysicalDeviceProperties(VkPhysicalDevice PhysicalDevice) const;
+    VkPhysicalDeviceFeatures      GetPhysicalDeviceFeatures(VkPhysicalDevice PhysicalDevice) const;
+    VkPhysicalDevice              GetMostSuitableDevice(std::vector<VkPhysicalDevice> const &PhysicalDevices) const;
+    uint32_t                      GetDeviceSuitability(VkPhysicalDevice PhysicalDevice) const;
+
+    void LogPhysicalDevices() const;
+    void LogPhysicalDevice(VkPhysicalDevice PhysicalDevice) const;
+    // !VK_PHYSICAL_DEVICE
+    //=========================================================================================================
     // VK_DEBUG_RELATED
     void CreateDebugCallback();
     void DestroyDebugCallback();
@@ -53,7 +69,8 @@ private:
 private:
     Window m_Window;
 
-    VkInstance m_VkInstance{};
+    VkInstance       m_VkInstance{};
+    VkPhysicalDevice m_VkPhysicalDevice{};
 
     VkDebugUtilsMessengerEXT m_VkDebugMessenger{};
 };

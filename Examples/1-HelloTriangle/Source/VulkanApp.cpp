@@ -43,8 +43,8 @@ void VulkanApp::InitVulkan()
     LogSupportedValidationLayers();
 
     CreateVkInstance();
-
     CreateDebugCallback();
+    SelectPhysicalDevice();
 
     VKL_INFO("Vulkan initialized");
 }
@@ -255,6 +255,151 @@ void VulkanApp::LogSupportedValidationLayers() const
     }
 }
 
+void VulkanApp::SelectPhysicalDevice()
+{
+    std::vector<VkPhysicalDevice> const PhysicalDevices = GetPhysicalDevices();
+
+    m_VkPhysicalDevice = GetMostSuitableDevice(PhysicalDevices);
+
+    VKL_TRACE("Selected VkPhysicalDevice:");
+    LogPhysicalDevice(m_VkPhysicalDevice);
+}
+
+std::vector<VkPhysicalDevice> VulkanApp::GetPhysicalDevices() const
+{
+    uint32_t NumPhysicalDevices = 0;
+    vkEnumeratePhysicalDevices(m_VkInstance, &NumPhysicalDevices, nullptr);
+
+    if (NumPhysicalDevices == 0)
+    {
+        VKL_CRITICAL("No VkPhysicalDevice found!");
+        exit(1);
+    }
+
+    std::vector<VkPhysicalDevice> PhysicalDevices(NumPhysicalDevices);
+    vkEnumeratePhysicalDevices(m_VkInstance, &NumPhysicalDevices, PhysicalDevices.data());
+
+    return PhysicalDevices;
+}
+
+VkPhysicalDeviceProperties VulkanApp::GetPhysicalDeviceProperties(VkPhysicalDevice PhysicalDevice) const
+{
+    VkPhysicalDeviceProperties PhysicalDeviceProperties{};
+    vkGetPhysicalDeviceProperties(PhysicalDevice, &PhysicalDeviceProperties);
+    return PhysicalDeviceProperties;
+}
+
+VkPhysicalDeviceFeatures VulkanApp::GetPhysicalDeviceFeatures(VkPhysicalDevice PhysicalDevice) const
+{
+    VkPhysicalDeviceFeatures PhysicalDeviceFeatures{};
+    vkGetPhysicalDeviceFeatures(PhysicalDevice, &PhysicalDeviceFeatures);
+    return PhysicalDeviceFeatures;
+}
+
+VkPhysicalDevice VulkanApp::GetMostSuitableDevice(std::vector<VkPhysicalDevice> const &PhysicalDevices) const
+{
+    VkPhysicalDevice MostSuitableDevice      = VK_NULL_HANDLE;
+    uint32_t         HighestSuitabilityScore = 0;
+
+    for (VkPhysicalDevice const PhysicalDevice : PhysicalDevices)
+    {
+        uint32_t SuitabilityScore = GetDeviceSuitability(PhysicalDevice);
+        if (SuitabilityScore > HighestSuitabilityScore)
+        {
+            MostSuitableDevice      = PhysicalDevice;
+            HighestSuitabilityScore = SuitabilityScore;
+        }
+    }
+
+    if (MostSuitableDevice == VK_NULL_HANDLE)
+    {
+        VKL_CRITICAL("No suitable VkPhysicalDevice found!");
+        exit(1);
+    }
+
+    return MostSuitableDevice;
+}
+
+uint32_t VulkanApp::GetDeviceSuitability(VkPhysicalDevice const PhysicalDevice) const
+{
+    uint32_t Score = 0;
+
+    VkPhysicalDeviceProperties const PhysicalDeviceProperties = GetPhysicalDeviceProperties(PhysicalDevice);
+    VkPhysicalDeviceFeatures const   PhysicalDeviceFeatures   = GetPhysicalDeviceFeatures(PhysicalDevice);
+
+    if (!PhysicalDeviceFeatures.geometryShader)
+    {
+        return 0; // Discard PhysicalDevice without Geometry Shader support
+    }
+
+    switch (PhysicalDeviceProperties.deviceType)
+    {
+    case VK_PHYSICAL_DEVICE_TYPE_CPU:
+        Score += 1;
+        break;
+
+    case VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU:
+        Score += 10000;
+        break;
+
+    case VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU:
+        Score += 100;
+        break;
+
+    default:
+        break;
+    }
+
+    // Biggest 2D Texture dimensions affect image quality
+    Score += PhysicalDeviceProperties.limits.maxImageDimension2D;
+
+    return Score;
+}
+
+void VulkanApp::LogPhysicalDevices() const
+{
+    std::vector<VkPhysicalDevice> PhysicalDevices = GetPhysicalDevices();
+    for (VkPhysicalDevice PhysicalDevice : PhysicalDevices)
+    {
+        LogPhysicalDevice(PhysicalDevice);
+    }
+}
+
+void VulkanApp::LogPhysicalDevice(VkPhysicalDevice PhysicalDevice) const
+{
+    VkPhysicalDeviceProperties const PhysicalDeviceProperties = GetPhysicalDeviceProperties(PhysicalDevice);
+    VkPhysicalDeviceFeatures const   PhysicalDeviceFeatures   = GetPhysicalDeviceFeatures(PhysicalDevice);
+
+    std::string DeviceType;
+    switch (PhysicalDeviceProperties.deviceType)
+    {
+    case VK_PHYSICAL_DEVICE_TYPE_CPU:
+        DeviceType = "CPU";
+        break;
+
+    case VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU:
+        DeviceType = "Discrete GPU";
+        break;
+
+    case VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU:
+        DeviceType = "Integrated GPU";
+        break;
+
+    default:
+        DeviceType = "Unknown type";
+        break;
+    }
+
+    VKL_TRACE(
+        "VKPhysicalDevice - Name: {}, Type: {}, API: v{}, VendorID: {}, Driver: v{}",
+        PhysicalDeviceProperties.deviceName,
+        DeviceType,
+        PhysicalDeviceProperties.apiVersion,
+        PhysicalDeviceProperties.vendorID,
+        PhysicalDeviceProperties.driverVersion
+    );
+}
+
 void VulkanApp::CreateDebugCallback()
 {
     if constexpr (!g_bValidationLayersEnabled)
@@ -267,8 +412,10 @@ void VulkanApp::CreateDebugCallback()
         VkDebugUtilsMessengerCreateInfoEXT MessengerInfo{};
         MessengerInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
         MessengerInfo.messageSeverity =
-            VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT |
-            VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+            //VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | 
+            VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT    |
+            VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | 
+            VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
         MessengerInfo.messageType = 
             VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT    |
             VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
