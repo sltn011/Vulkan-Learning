@@ -6,9 +6,6 @@
 
 #include <vulkan/vulkan.h>
 
-// Utils
-#include <map>
-
 class VulkanApp
 {
 public:
@@ -28,8 +25,8 @@ private:
     void CreateVkInstance(); // Set up VulkanAPI
     void DestroyVkInstance();
 
-    std::vector<char const *> GetRequiredExtensions() const;
-    std::vector<char const *> GetRequiredValidationLayers() const;
+    std::vector<char const *> GetRequiredInstanceExtensions() const;
+    std::vector<char const *> GetRequiredInstanceValidationLayers() const;
 
     bool CheckExtensionsAvailable(std::vector<char const *> const &Required) const;
     bool CheckValidationLayersAvailable(std::vector<char const *> const &Required) const;
@@ -54,6 +51,27 @@ private:
     void LogPhysicalDevice(VkPhysicalDevice PhysicalDevice) const;
     // !VK_PHYSICAL_DEVICE
     //=========================================================================================================
+    // VK_QUEUE_FAMILY
+    std::vector<VkQueueFamilyProperties> GetPhysicalDeviceQueueFamilyProperties(VkPhysicalDevice PhysicalDevice) const;
+
+    uint32_t GetMostSuitableQueueFamilyIndex(std::vector<VkQueueFamilyProperties> const &QueueFamiliesProperties) const;
+    uint32_t GetQueueFamilySuitability(VkQueueFamilyProperties const &QueueFamilyProperties) const;
+
+    void LogQueueFamiliesProperties(VkPhysicalDevice PhysicalDevice) const;
+    void LogQueueFamilyProperties(uint32_t FamilyIndex, VkQueueFamilyProperties QueueFamilyProperties) const;
+    // !VK_QUEUE_FAMILY
+    //=========================================================================================================
+    // VK_DEVICE
+    void CreateDevice();
+    void DestroyDevice();
+
+    std::vector<char const *> GetRequiredDeviceExtensions() const;
+    std::vector<char const *> GetRequiredDeviceValidationLayers(
+    ) const; // Ignored by newer Vulkan versions and uses Layers from VkInstance, left for compatibility
+
+    void RetrieveQueueFromCreatedDevice();
+    // !VK_DEVICE
+    //=========================================================================================================
     // VK_DEBUG_RELATED
     void CreateDebugCallback();
     void DestroyDebugCallback();
@@ -71,6 +89,9 @@ private:
 
     VkInstance       m_VkInstance{};
     VkPhysicalDevice m_VkPhysicalDevice{};
+    uint32_t         m_QueueFamilyIndex = 0;
+    VkDevice         m_VkDevice{};
+    VkQueue          m_VkQueue;
 
     VkDebugUtilsMessengerEXT m_VkDebugMessenger{};
 };

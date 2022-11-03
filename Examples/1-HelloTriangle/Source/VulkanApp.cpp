@@ -45,6 +45,8 @@ void VulkanApp::InitVulkan()
     CreateVkInstance();
     CreateDebugCallback();
     SelectPhysicalDevice();
+    CreateDevice();
+    RetrieveQueueFromCreatedDevice();
 
     VKL_INFO("Vulkan initialized");
 }
@@ -61,6 +63,8 @@ void VulkanApp::CleanUp()
 {
     VKL_INFO("VulkanApp is stopping...");
 
+    DestroyDevice();
+
     DestroyDebugCallback();
 
     DestroyVkInstance();
@@ -72,26 +76,25 @@ void VulkanApp::CreateVkInstance()
 {
     VKL_TRACE("Creating VkInstance...");
 
-    VkApplicationInfo AppInfo{};
-    AppInfo.sType              = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-    AppInfo.apiVersion         = VK_API_VERSION_1_3;
-    AppInfo.pApplicationName   = m_Window.GetTitle();
-    AppInfo.applicationVersion = VK_MAKE_API_VERSION(0, 1, 0, 0);
-    AppInfo.pEngineName        = "";
-    AppInfo.engineVersion      = VK_MAKE_API_VERSION(0, 1, 0, 0);
-    AppInfo.pNext              = nullptr;
+    VkApplicationInfo ApplicationInfo{};
+    ApplicationInfo.sType              = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+    ApplicationInfo.apiVersion         = VK_API_VERSION_1_3;
+    ApplicationInfo.pApplicationName   = m_Window.GetTitle();
+    ApplicationInfo.applicationVersion = VK_MAKE_API_VERSION(0, 1, 0, 0);
+    ApplicationInfo.pEngineName        = "";
+    ApplicationInfo.engineVersion      = VK_MAKE_API_VERSION(0, 1, 0, 0);
 
-    std::vector<char const *> const Extensions = GetRequiredExtensions();
-    std::vector<char const *> const Layers     = GetRequiredValidationLayers();
+    std::vector<char const *> const Extensions       = GetRequiredInstanceExtensions();
+    std::vector<char const *> const ValidationLayers = GetRequiredInstanceValidationLayers();
 
     // Specify global(for whole program) extensions and validation layers
     VkInstanceCreateInfo InstanceCreateInfo{};
     InstanceCreateInfo.sType                   = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-    InstanceCreateInfo.pApplicationInfo        = &AppInfo;
+    InstanceCreateInfo.pApplicationInfo        = &ApplicationInfo;
     InstanceCreateInfo.enabledExtensionCount   = static_cast<uint32_t>(Extensions.size());
     InstanceCreateInfo.ppEnabledExtensionNames = Extensions.data();
-    InstanceCreateInfo.enabledLayerCount       = static_cast<uint32_t>(Layers.size());
-    InstanceCreateInfo.ppEnabledLayerNames     = Layers.data();
+    InstanceCreateInfo.enabledLayerCount       = static_cast<uint32_t>(ValidationLayers.size());
+    InstanceCreateInfo.ppEnabledLayerNames     = ValidationLayers.data();
 
     if (vkCreateInstance(&InstanceCreateInfo, nullptr, &m_VkInstance) != VkResult::VK_SUCCESS)
     {
@@ -107,7 +110,7 @@ void VulkanApp::DestroyVkInstance()
     vkDestroyInstance(m_VkInstance, nullptr);
 }
 
-std::vector<char const *> VulkanApp::GetRequiredExtensions() const
+std::vector<char const *> VulkanApp::GetRequiredInstanceExtensions() const
 {
     uint32_t     NumRequiredExtensions = 0;
     char const **RequiredExtensions    = glfwGetRequiredInstanceExtensions(&NumRequiredExtensions);
@@ -139,12 +142,13 @@ std::vector<char const *> VulkanApp::GetRequiredExtensions() const
     return Extensions;
 }
 
-std::vector<char const *> VulkanApp::GetRequiredValidationLayers() const
+std::vector<char const *> VulkanApp::GetRequiredInstanceValidationLayers() const
 {
     if constexpr (g_bValidationLayersEnabled)
     {
         // clang-format off
-        const std::vector<char const *> ValidationLayers{
+        const std::vector<char const *> ValidationLayers
+        {
             "VK_LAYER_KHRONOS_validation"
         };
         // clang-format on
@@ -398,6 +402,162 @@ void VulkanApp::LogPhysicalDevice(VkPhysicalDevice PhysicalDevice) const
         PhysicalDeviceProperties.vendorID,
         PhysicalDeviceProperties.driverVersion
     );
+}
+
+std::vector<VkQueueFamilyProperties> VulkanApp::GetPhysicalDeviceQueueFamilyProperties(
+    VkPhysicalDevice const PhysicalDevice
+) const
+{
+    uint32_t NumQueueFamilyProperties = 0;
+    vkGetPhysicalDeviceQueueFamilyProperties(PhysicalDevice, &NumQueueFamilyProperties, nullptr);
+
+    std::vector<VkQueueFamilyProperties> QueueFamilyProperties(NumQueueFamilyProperties);
+    vkGetPhysicalDeviceQueueFamilyProperties(PhysicalDevice, &NumQueueFamilyProperties, QueueFamilyProperties.data());
+    return QueueFamilyProperties;
+}
+
+uint32_t VulkanApp::GetMostSuitableQueueFamilyIndex(std::vector<VkQueueFamilyProperties> const &QueueFamiliesProperties
+) const
+{
+    uint32_t MostSuitableQueueFamilyIndex; // No default value
+    uint32_t HighestSuitabilityScore = 0;
+
+    uint32_t Counter = 0;
+    for (VkQueueFamilyProperties const &QueueFamilyProperties : QueueFamiliesProperties)
+    {
+        uint32_t QueueFamilySuitability = GetQueueFamilySuitability(QueueFamilyProperties);
+        if (QueueFamilySuitability > HighestSuitabilityScore)
+        {
+            MostSuitableQueueFamilyIndex = Counter;
+            HighestSuitabilityScore      = QueueFamilySuitability;
+        }
+    }
+
+    if (HighestSuitabilityScore == 0)
+    {
+        VKL_CRITICAL("No suitable queue family found!");
+        exit(1);
+    }
+
+    return MostSuitableQueueFamilyIndex;
+}
+
+uint32_t VulkanApp::GetQueueFamilySuitability(VkQueueFamilyProperties const &QueueFamilyProperties) const
+{
+    uint32_t           Score      = 0;
+    VkQueueFlags const QueueFlags = QueueFamilyProperties.queueFlags;
+
+    if (!(QueueFlags & VK_QUEUE_GRAPHICS_BIT))
+    {
+        return 0; // Required
+    }
+
+    if (QueueFlags & VK_QUEUE_COMPUTE_BIT)
+    {
+        Score += 10;
+    }
+    if (QueueFlags & VK_QUEUE_TRANSFER_BIT)
+    {
+        Score += 10;
+    }
+    if (QueueFlags & VK_QUEUE_SPARSE_BINDING_BIT)
+    {
+        Score += 10;
+    }
+
+    Score += QueueFamilyProperties.queueCount;
+    return Score;
+}
+
+void VulkanApp::LogQueueFamiliesProperties(VkPhysicalDevice const PhysicalDevice) const
+{
+    std::vector<VkQueueFamilyProperties> QueueFamilesProperties =
+        GetPhysicalDeviceQueueFamilyProperties(PhysicalDevice);
+
+    uint32_t FamilyIndex = 0;
+    for (VkQueueFamilyProperties const &QueueFamilyProperties : QueueFamilesProperties)
+    {
+        LogQueueFamilyProperties(FamilyIndex++, QueueFamilyProperties);
+    }
+}
+
+void VulkanApp::LogQueueFamilyProperties(
+    uint32_t const FamilyIndex, VkQueueFamilyProperties const QueueFamilyProperties
+) const
+{
+    VkQueueFlags const QueueFlags = QueueFamilyProperties.queueFlags;
+    VKL_TRACE(
+        "QueueFamily {}: QueueCount: {}, Bits: [Graphics: {:b}, Compute: {:b}, Transfer: {:b}, SparseBinding: {:b}]",
+        FamilyIndex,
+        QueueFamilyProperties.queueCount,
+        static_cast<bool>(QueueFlags & VK_QUEUE_GRAPHICS_BIT),
+        static_cast<bool>(QueueFlags & VK_QUEUE_COMPUTE_BIT),
+        static_cast<bool>(QueueFlags & VK_QUEUE_TRANSFER_BIT),
+        static_cast<bool>(QueueFlags & VK_QUEUE_SPARSE_BINDING_BIT)
+    );
+}
+
+void VulkanApp::CreateDevice()
+{
+    std::vector<VkQueueFamilyProperties> QueueFamilyProperties =
+        GetPhysicalDeviceQueueFamilyProperties(m_VkPhysicalDevice);
+
+    float QueuePriority = 1.0f;
+
+    VkDeviceQueueCreateInfo DeviceQueueCreateInfo{};
+    DeviceQueueCreateInfo.sType            = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+    DeviceQueueCreateInfo.queueFamilyIndex = GetMostSuitableQueueFamilyIndex(QueueFamilyProperties);
+    DeviceQueueCreateInfo.queueCount       = 1;
+    DeviceQueueCreateInfo.pQueuePriorities = &QueuePriority;
+
+    // Features supported by VkPhysicalDevice that are requested for use by VkDevice
+    VkPhysicalDeviceFeatures DeviceRequestedFeatures{};
+
+    std::vector<char const *> Extensions       = GetRequiredDeviceExtensions();
+    std::vector<char const *> ValidationLayers = GetRequiredDeviceValidationLayers();
+
+    VkDeviceCreateInfo DeviceCreateInfo{};
+    DeviceCreateInfo.sType                   = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+    DeviceCreateInfo.pQueueCreateInfos       = &DeviceQueueCreateInfo;
+    DeviceCreateInfo.queueCreateInfoCount    = 1;
+    DeviceCreateInfo.pEnabledFeatures        = &DeviceRequestedFeatures;
+    DeviceCreateInfo.enabledExtensionCount   = static_cast<uint32_t>(Extensions.size());
+    DeviceCreateInfo.ppEnabledExtensionNames = Extensions.data();
+    DeviceCreateInfo.enabledLayerCount       = static_cast<uint32_t>(ValidationLayers.size());
+    DeviceCreateInfo.ppEnabledLayerNames     = ValidationLayers.data();
+
+    if (vkCreateDevice(m_VkPhysicalDevice, &DeviceCreateInfo, nullptr, &m_VkDevice) != VK_SUCCESS)
+    {
+        VKL_CRITICAL("Failed to create VKDevice!");
+        exit(1);
+    }
+}
+
+void VulkanApp::DestroyDevice()
+{
+    vkDestroyDevice(m_VkDevice, nullptr);
+}
+
+std::vector<char const *> VulkanApp::GetRequiredDeviceExtensions() const
+{
+    // clang-format off
+    std::vector<char const *> DeviceExtensions
+    {
+
+    };
+    // clang-format on
+    return DeviceExtensions;
+}
+
+std::vector<char const *> VulkanApp::GetRequiredDeviceValidationLayers() const
+{
+    return GetRequiredInstanceValidationLayers(); // same as Instance Layers
+}
+
+void VulkanApp::RetrieveQueueFromCreatedDevice()
+{
+    uint32_t QueueIndex = 0;
+    vkGetDeviceQueue(m_VkDevice, m_QueueFamilyIndex, QueueIndex, &m_VkQueue);
 }
 
 void VulkanApp::CreateDebugCallback()
