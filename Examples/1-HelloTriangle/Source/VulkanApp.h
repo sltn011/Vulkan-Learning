@@ -91,7 +91,7 @@ private:
     VkPhysicalDevice m_VkPhysicalDevice{};
     uint32_t         m_QueueFamilyIndex = 0;
     VkDevice         m_VkDevice{};
-    VkQueue          m_VkQueue;
+    VkQueue          m_VkQueue{};
 
     VkDebugUtilsMessengerEXT m_VkDebugMessenger{};
 };

@@ -124,12 +124,16 @@ std::vector<char const *> VulkanApp::GetRequiredInstanceExtensions() const
     // clang-format on
 
     std::vector<char const *> Extensions(NumRequiredExtensions + NumAdditionalExtensions);
+    VKL_TRACE("Required instance extensions: ");
     for (uint32_t i = 0; i < NumRequiredExtensions; ++i)
     {
+        VKL_TRACE("{}: {}", i + 1, RequiredExtensions[i]);
         Extensions[i] = RequiredExtensions[i];
     }
+    VKL_TRACE("Additional instance extensions: ");
     for (uint32_t i = 0; i < NumAdditionalExtensions; ++i)
     {
+        VKL_TRACE("{}: {}", i + 1, AdditionalExtensions[i]);
         Extensions[NumRequiredExtensions + i] = AdditionalExtensions[i];
     }
 
