@@ -2,6 +2,7 @@
 #define VULKANLEARNING_VULKANAPP
 
 #include "Log.h"
+#include "QueueFamilyIndices.h"
 #include "Window.h"
 
 #include <vulkan/vulkan.h>
@@ -44,21 +45,41 @@ private:
     std::vector<VkPhysicalDevice> GetPhysicalDevices() const;
     VkPhysicalDeviceProperties    GetPhysicalDeviceProperties(VkPhysicalDevice PhysicalDevice) const;
     VkPhysicalDeviceFeatures      GetPhysicalDeviceFeatures(VkPhysicalDevice PhysicalDevice) const;
-    VkPhysicalDevice              GetMostSuitableDevice(std::vector<VkPhysicalDevice> const &PhysicalDevices) const;
-    uint32_t                      GetDeviceSuitability(VkPhysicalDevice PhysicalDevice) const;
+    VkPhysicalDevice GetMostSuitableDevice(std::vector<VkPhysicalDevice> const &PhysicalDevices) const;
+    uint32_t         GetDeviceSuitability(VkPhysicalDevice PhysicalDevice) const;
 
     void LogPhysicalDevices() const;
     void LogPhysicalDevice(VkPhysicalDevice PhysicalDevice) const;
     // !VK_PHYSICAL_DEVICE
     //=========================================================================================================
     // VK_QUEUE_FAMILY
-    std::vector<VkQueueFamilyProperties> GetPhysicalDeviceQueueFamilyProperties(VkPhysicalDevice PhysicalDevice) const;
+    std::vector<VkQueueFamilyProperties> GetPhysicalDeviceQueueFamilyProperties(
+        VkPhysicalDevice PhysicalDevice
+    ) const;
 
-    uint32_t GetMostSuitableQueueFamilyIndex(std::vector<VkQueueFamilyProperties> const &QueueFamiliesProperties) const;
-    uint32_t GetQueueFamilySuitability(VkQueueFamilyProperties const &QueueFamilyProperties) const;
+    QueueFamilyIndices GetPhysicalDeviceMostSuitableQueueFamilyIndices(VkPhysicalDevice PhysicalDevice) const;
 
-    void LogQueueFamiliesProperties(VkPhysicalDevice PhysicalDevice) const;
-    void LogQueueFamilyProperties(uint32_t FamilyIndex, VkQueueFamilyProperties QueueFamilyProperties) const;
+    std::optional<uint32_t> GetPhysicalDeviceMostSuitableQueueFamily(
+        VkPhysicalDevice                            PhysicalDevice,
+        std::vector<VkQueueFamilyProperties> const &QueueFamiliesProperties,
+        uint32_t (VulkanApp::*SuitabilityCalculatorFunction
+        )(VkPhysicalDevice const, VkQueueFamilyProperties const &, uint32_t) const
+    ) const;
+    uint32_t GetPhysicalDeviceGraphicsQueueFamilySuitability(
+        VkPhysicalDevice               PhysicalDevice,
+        VkQueueFamilyProperties const &QueueFamilyProperties,
+        uint32_t                       QueueFamilyIndex
+    ) const;
+    uint32_t GetPhysicalDevicePresentationQueueFamilySuitability(
+        VkPhysicalDevice               PhysicalDevice,
+        VkQueueFamilyProperties const &QueueFamilyProperties,
+        uint32_t                       QueueFamilyIndex
+    ) const;
+
+    void LogPhysicalDeviceQueueFamiliesProperties(VkPhysicalDevice PhysicalDevice) const;
+    void LogPhysicalDeviceQueueFamilyProperties(
+        uint32_t QueueFamilyIndex, VkQueueFamilyProperties QueueFamilyProperties
+    ) const;
     // !VK_QUEUE_FAMILY
     //=========================================================================================================
     // VK_DEVICE
@@ -69,7 +90,7 @@ private:
     std::vector<char const *> GetRequiredDeviceValidationLayers(
     ) const; // Ignored by newer Vulkan versions and uses Layers from VkInstance, left for compatibility
 
-    void RetrieveQueueFromCreatedDevice();
+    void RetrieveQueuesFromCreatedDevice();
     // !VK_DEVICE
     //=========================================================================================================
     // VK_DEBUG_RELATED
@@ -83,15 +104,25 @@ private:
         void                                       *pUserData
     );
     // !VK_DEBUG_RELATED
+    //=========================================================================================================
+    // VK_KHR_SURFACE
+    void CreateSurface();
+    void DestroySurface();
+    // !VK_KHR_SURFACE
 
 private:
     Window m_Window;
 
-    VkInstance       m_VkInstance{};
-    VkPhysicalDevice m_VkPhysicalDevice{};
-    uint32_t         m_QueueFamilyIndex = 0;
-    VkDevice         m_VkDevice{};
-    VkQueue          m_VkQueue{};
+    VkInstance m_VkInstance{};
+
+    VkPhysicalDevice   m_VkPhysicalDevice{};
+    QueueFamilyIndices m_QueueFamilyIndices{};
+
+    VkDevice m_VkDevice{};
+    VkQueue  m_GraphicsQueue{};
+    VkQueue  m_PresentationQueue{};
+
+    VkSurfaceKHR m_VkSurface{};
 
     VkDebugUtilsMessengerEXT m_VkDebugMessenger{};
 };

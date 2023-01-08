@@ -8,6 +8,7 @@
 
 #include <cstdint>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 #ifdef VKL_DEBUG
@@ -44,9 +45,9 @@ void VulkanApp::InitVulkan()
 
     CreateVkInstance();
     CreateDebugCallback();
+    CreateSurface();
     SelectPhysicalDevice();
     CreateDevice();
-    RetrieveQueueFromCreatedDevice();
 
     VKL_INFO("Vulkan initialized");
 }
@@ -64,12 +65,11 @@ void VulkanApp::CleanUp()
     VKL_INFO("VulkanApp is stopping...");
 
     DestroyDevice();
-
+    DestroySurface();
     DestroyDebugCallback();
-
     DestroyVkInstance();
 
-    VKL_INFO("VkInstance destroyed");
+    VKL_INFO("VulkanApp resources cleaned up");
 }
 
 void VulkanApp::CreateVkInstance()
@@ -101,13 +101,13 @@ void VulkanApp::CreateVkInstance()
         VKL_CRITICAL("Failed to create VkInstance!");
         exit(1);
     }
-
     VKL_TRACE("Created VkInstance successfully");
 }
 
 void VulkanApp::DestroyVkInstance()
 {
     vkDestroyInstance(m_VkInstance, nullptr);
+    VKL_TRACE("VkInstance destroyed");
 }
 
 std::vector<char const *> VulkanApp::GetRequiredInstanceExtensions() const
@@ -267,10 +267,13 @@ void VulkanApp::SelectPhysicalDevice()
 {
     std::vector<VkPhysicalDevice> const PhysicalDevices = GetPhysicalDevices();
 
-    m_VkPhysicalDevice = GetMostSuitableDevice(PhysicalDevices);
+    m_VkPhysicalDevice   = GetMostSuitableDevice(PhysicalDevices);
+    m_QueueFamilyIndices = GetPhysicalDeviceMostSuitableQueueFamilyIndices(m_VkPhysicalDevice);
 
     VKL_TRACE("Selected VkPhysicalDevice:");
     LogPhysicalDevice(m_VkPhysicalDevice);
+    VKL_TRACE("Selected VkPhysicalDevice QueueFamilyProperties:");
+    LogPhysicalDeviceQueueFamiliesProperties(m_VkPhysicalDevice);
 }
 
 std::vector<VkPhysicalDevice> VulkanApp::GetPhysicalDevices() const
@@ -311,6 +314,14 @@ VkPhysicalDevice VulkanApp::GetMostSuitableDevice(std::vector<VkPhysicalDevice> 
 
     for (VkPhysicalDevice const PhysicalDevice : PhysicalDevices)
     {
+        QueueFamilyIndices PhysicalDeviceQueueFamilyIndices =
+            GetPhysicalDeviceMostSuitableQueueFamilyIndices(PhysicalDevice);
+
+        if (!PhysicalDeviceQueueFamilyIndices.IsComplete())
+        {
+            continue;
+        }
+
         uint32_t SuitabilityScore = GetDeviceSuitability(PhysicalDevice);
         if (SuitabilityScore > HighestSuitabilityScore)
         {
@@ -416,37 +427,61 @@ std::vector<VkQueueFamilyProperties> VulkanApp::GetPhysicalDeviceQueueFamilyProp
     vkGetPhysicalDeviceQueueFamilyProperties(PhysicalDevice, &NumQueueFamilyProperties, nullptr);
 
     std::vector<VkQueueFamilyProperties> QueueFamilyProperties(NumQueueFamilyProperties);
-    vkGetPhysicalDeviceQueueFamilyProperties(PhysicalDevice, &NumQueueFamilyProperties, QueueFamilyProperties.data());
+    vkGetPhysicalDeviceQueueFamilyProperties(
+        PhysicalDevice, &NumQueueFamilyProperties, QueueFamilyProperties.data()
+    );
     return QueueFamilyProperties;
 }
 
-uint32_t VulkanApp::GetMostSuitableQueueFamilyIndex(std::vector<VkQueueFamilyProperties> const &QueueFamiliesProperties
+QueueFamilyIndices VulkanApp::GetPhysicalDeviceMostSuitableQueueFamilyIndices(VkPhysicalDevice PhysicalDevice
 ) const
 {
-    uint32_t MostSuitableQueueFamilyIndex; // No default value
-    uint32_t HighestSuitabilityScore = 0;
+    std::vector<VkQueueFamilyProperties> QueueFamiliesProperties =
+        GetPhysicalDeviceQueueFamilyProperties(PhysicalDevice);
 
-    uint32_t Counter = 0;
-    for (VkQueueFamilyProperties const &QueueFamilyProperties : QueueFamiliesProperties)
-    {
-        uint32_t QueueFamilySuitability = GetQueueFamilySuitability(QueueFamilyProperties);
-        if (QueueFamilySuitability > HighestSuitabilityScore)
-        {
-            MostSuitableQueueFamilyIndex = Counter;
-            HighestSuitabilityScore      = QueueFamilySuitability;
-        }
-    }
-
-    if (HighestSuitabilityScore == 0)
-    {
-        VKL_CRITICAL("No suitable queue family found!");
-        exit(1);
-    }
-
-    return MostSuitableQueueFamilyIndex;
+    QueueFamilyIndices FamilyIndices{};
+    FamilyIndices.GraphicsFamily = GetPhysicalDeviceMostSuitableQueueFamily(
+        PhysicalDevice, QueueFamiliesProperties, &VulkanApp::GetPhysicalDeviceGraphicsQueueFamilySuitability
+    );
+    FamilyIndices.PresentationFamily = GetPhysicalDeviceMostSuitableQueueFamily(
+        PhysicalDevice,
+        QueueFamiliesProperties,
+        &VulkanApp::GetPhysicalDevicePresentationQueueFamilySuitability
+    );
+    return FamilyIndices;
 }
 
-uint32_t VulkanApp::GetQueueFamilySuitability(VkQueueFamilyProperties const &QueueFamilyProperties) const
+std::optional<uint32_t> VulkanApp::GetPhysicalDeviceMostSuitableQueueFamily(
+    VkPhysicalDevice                            PhysicalDevice,
+    std::vector<VkQueueFamilyProperties> const &QueueFamiliesProperties,
+    uint32_t (VulkanApp::*SuitabilityCalculatorFunction
+    )(VkPhysicalDevice const, VkQueueFamilyProperties const &, uint32_t) const
+) const
+{
+    std::optional<uint32_t> QueueFamilyIndex;
+    uint32_t                HighestSuitabilityScore = 0;
+
+    uint32_t FamilyIndex = 0;
+    for (VkQueueFamilyProperties const &QueueFamilyProperties : QueueFamiliesProperties)
+    {
+        uint32_t QueueFamilySuitability =
+            (this->*SuitabilityCalculatorFunction)(PhysicalDevice, QueueFamilyProperties, FamilyIndex);
+        if (QueueFamilySuitability > HighestSuitabilityScore)
+        {
+            QueueFamilyIndex        = FamilyIndex;
+            HighestSuitabilityScore = QueueFamilySuitability;
+        }
+        FamilyIndex++;
+    }
+
+    return QueueFamilyIndex;
+}
+
+uint32_t VulkanApp::GetPhysicalDeviceGraphicsQueueFamilySuitability(
+    VkPhysicalDevice               PhysicalDevice,
+    VkQueueFamilyProperties const &QueueFamilyProperties,
+    uint32_t                       QueueFamilyIndex
+) const
 {
     uint32_t           Score      = 0;
     VkQueueFlags const QueueFlags = QueueFamilyProperties.queueFlags;
@@ -469,11 +504,59 @@ uint32_t VulkanApp::GetQueueFamilySuitability(VkQueueFamilyProperties const &Que
         Score += 10;
     }
 
+    VkBool32 bPresentationSupported = false;
+    vkGetPhysicalDeviceSurfaceSupportKHR(
+        PhysicalDevice, QueueFamilyIndex, m_VkSurface, &bPresentationSupported
+    );
+    if (bPresentationSupported)
+    {
+        Score += 100;
+    }
+
     Score += QueueFamilyProperties.queueCount;
     return Score;
 }
 
-void VulkanApp::LogQueueFamiliesProperties(VkPhysicalDevice const PhysicalDevice) const
+uint32_t VulkanApp::GetPhysicalDevicePresentationQueueFamilySuitability(
+    VkPhysicalDevice               PhysicalDevice,
+    VkQueueFamilyProperties const &QueueFamilyProperties,
+    uint32_t                       QueueFamilyIndex
+) const
+{
+    uint32_t           Score      = 0;
+    VkQueueFlags const QueueFlags = QueueFamilyProperties.queueFlags;
+
+    VkBool32 bPresentationSupported = false;
+    vkGetPhysicalDeviceSurfaceSupportKHR(
+        PhysicalDevice, QueueFamilyIndex, m_VkSurface, &bPresentationSupported
+    );
+    if (!bPresentationSupported)
+    {
+        return 0;
+    }
+
+    if (QueueFlags & VK_QUEUE_GRAPHICS_BIT)
+    {
+        Score += 10;
+    }
+    if (QueueFlags & VK_QUEUE_COMPUTE_BIT)
+    {
+        Score += 10;
+    }
+    if (QueueFlags & VK_QUEUE_TRANSFER_BIT)
+    {
+        Score += 10;
+    }
+    if (QueueFlags & VK_QUEUE_SPARSE_BINDING_BIT)
+    {
+        Score += 10;
+    }
+
+    Score += QueueFamilyProperties.queueCount;
+    return Score;
+}
+
+void VulkanApp::LogPhysicalDeviceQueueFamiliesProperties(VkPhysicalDevice const PhysicalDevice) const
 {
     std::vector<VkQueueFamilyProperties> QueueFamilesProperties =
         GetPhysicalDeviceQueueFamilyProperties(PhysicalDevice);
@@ -481,38 +564,60 @@ void VulkanApp::LogQueueFamiliesProperties(VkPhysicalDevice const PhysicalDevice
     uint32_t FamilyIndex = 0;
     for (VkQueueFamilyProperties const &QueueFamilyProperties : QueueFamilesProperties)
     {
-        LogQueueFamilyProperties(FamilyIndex++, QueueFamilyProperties);
+        LogPhysicalDeviceQueueFamilyProperties(FamilyIndex++, QueueFamilyProperties);
     }
 }
 
-void VulkanApp::LogQueueFamilyProperties(
-    uint32_t const FamilyIndex, VkQueueFamilyProperties const QueueFamilyProperties
+void VulkanApp::LogPhysicalDeviceQueueFamilyProperties(
+    uint32_t const QueueFamilyIndex, VkQueueFamilyProperties const QueueFamilyProperties
 ) const
 {
+    VkBool32 bPresentationSupported = false;
+    vkGetPhysicalDeviceSurfaceSupportKHR(
+        m_VkPhysicalDevice, QueueFamilyIndex, m_VkSurface, &bPresentationSupported
+    );
+
     VkQueueFlags const QueueFlags = QueueFamilyProperties.queueFlags;
     VKL_TRACE(
-        "QueueFamily {}: QueueCount: {}, Bits: [Graphics: {:b}, Compute: {:b}, Transfer: {:b}, SparseBinding: {:b}]",
-        FamilyIndex,
+        "QueueFamily {}: QueueCount: {}, Bits: [Graphics: {:b}, Compute: {:b}, Transfer: {:b}, "
+        "SparseBinding: {:b}], "
+        "Presentation Support: {:b}",
+        QueueFamilyIndex,
         QueueFamilyProperties.queueCount,
         static_cast<bool>(QueueFlags & VK_QUEUE_GRAPHICS_BIT),
         static_cast<bool>(QueueFlags & VK_QUEUE_COMPUTE_BIT),
         static_cast<bool>(QueueFlags & VK_QUEUE_TRANSFER_BIT),
-        static_cast<bool>(QueueFlags & VK_QUEUE_SPARSE_BINDING_BIT)
+        static_cast<bool>(QueueFlags & VK_QUEUE_SPARSE_BINDING_BIT),
+        bPresentationSupported
     );
 }
 
 void VulkanApp::CreateDevice()
 {
-    std::vector<VkQueueFamilyProperties> QueueFamilyProperties =
-        GetPhysicalDeviceQueueFamilyProperties(m_VkPhysicalDevice);
+    QueueFamilyIndices PhysicalDeviceQueueFamilyIndices =
+        GetPhysicalDeviceMostSuitableQueueFamilyIndices(m_VkPhysicalDevice);
 
-    float QueuePriority = 1.0f;
+    // clang-format off
+    std::unordered_set<uint32_t> QueueFamilyIndices{
+        PhysicalDeviceQueueFamilyIndices.GraphicsFamily.value(),
+        PhysicalDeviceQueueFamilyIndices.PresentationFamily.value()
+    };
+    // clang-format on
 
-    VkDeviceQueueCreateInfo DeviceQueueCreateInfo{};
-    DeviceQueueCreateInfo.sType            = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-    DeviceQueueCreateInfo.queueFamilyIndex = GetMostSuitableQueueFamilyIndex(QueueFamilyProperties);
-    DeviceQueueCreateInfo.queueCount       = 1;
-    DeviceQueueCreateInfo.pQueuePriorities = &QueuePriority;
+    std::vector<VkDeviceQueueCreateInfo> QueueCreateInfos(QueueFamilyIndices.size());
+
+    float    QueuePriority = 1.0f;
+    uint32_t Counter       = 0;
+    for (uint32_t QueueFamilyIndex : QueueFamilyIndices)
+    {
+        VkDeviceQueueCreateInfo DeviceQueueCreateInfo{};
+        DeviceQueueCreateInfo.sType            = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+        DeviceQueueCreateInfo.queueFamilyIndex = QueueFamilyIndex;
+        DeviceQueueCreateInfo.queueCount       = 1;
+        DeviceQueueCreateInfo.pQueuePriorities = &QueuePriority;
+
+        QueueCreateInfos[Counter++] = DeviceQueueCreateInfo;
+    }
 
     // Features supported by VkPhysicalDevice that are requested for use by VkDevice
     VkPhysicalDeviceFeatures DeviceRequestedFeatures{};
@@ -522,8 +627,8 @@ void VulkanApp::CreateDevice()
 
     VkDeviceCreateInfo DeviceCreateInfo{};
     DeviceCreateInfo.sType                   = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-    DeviceCreateInfo.pQueueCreateInfos       = &DeviceQueueCreateInfo;
-    DeviceCreateInfo.queueCreateInfoCount    = 1;
+    DeviceCreateInfo.pQueueCreateInfos       = QueueCreateInfos.data();
+    DeviceCreateInfo.queueCreateInfoCount    = static_cast<uint32_t>(QueueCreateInfos.size());
     DeviceCreateInfo.pEnabledFeatures        = &DeviceRequestedFeatures;
     DeviceCreateInfo.enabledExtensionCount   = static_cast<uint32_t>(Extensions.size());
     DeviceCreateInfo.ppEnabledExtensionNames = Extensions.data();
@@ -535,11 +640,15 @@ void VulkanApp::CreateDevice()
         VKL_CRITICAL("Failed to create VKDevice!");
         exit(1);
     }
+    VKL_TRACE("Created VkDevice successfully");
+
+    RetrieveQueuesFromCreatedDevice();
 }
 
 void VulkanApp::DestroyDevice()
 {
     vkDestroyDevice(m_VkDevice, nullptr);
+    VKL_TRACE("VkDevice destroyed");
 }
 
 std::vector<char const *> VulkanApp::GetRequiredDeviceExtensions() const
@@ -558,10 +667,15 @@ std::vector<char const *> VulkanApp::GetRequiredDeviceValidationLayers() const
     return GetRequiredInstanceValidationLayers(); // same as Instance Layers
 }
 
-void VulkanApp::RetrieveQueueFromCreatedDevice()
+void VulkanApp::RetrieveQueuesFromCreatedDevice()
 {
     uint32_t QueueIndex = 0;
-    vkGetDeviceQueue(m_VkDevice, m_QueueFamilyIndex, QueueIndex, &m_VkQueue);
+    vkGetDeviceQueue(m_VkDevice, m_QueueFamilyIndices.GraphicsFamily.value(), QueueIndex, &m_GraphicsQueue);
+    vkGetDeviceQueue(
+        m_VkDevice, m_QueueFamilyIndices.PresentationFamily.value(), QueueIndex, &m_PresentationQueue
+    );
+
+    VKL_TRACE("Retrieved VkQueues from VkDevice");
 }
 
 void VulkanApp::CreateDebugCallback()
@@ -594,14 +708,14 @@ void VulkanApp::CreateDebugCallback()
             VKL_CRITICAL("Failed to create VkDebugUtilsMessengerEXT!");
             exit(1);
         }
-
-        VKL_TRACE("Debug callback set up successfully");
+        VKL_TRACE("DebugCallback set up successfully");
     }
 }
 
 void VulkanApp::DestroyDebugCallback()
 {
     Utils::DestroyDebugUtilsMessengerEXT(m_VkInstance, m_VkDebugMessenger, nullptr);
+    VKL_TRACE("DebugCallback destroyed");
 }
 
 VkBool32 VulkanApp::DebugCallback(
@@ -633,4 +747,20 @@ VkBool32 VulkanApp::DebugCallback(
         break;
     }
     return VK_FALSE;
+}
+
+void VulkanApp::CreateSurface()
+{
+    if (glfwCreateWindowSurface(m_VkInstance, m_Window.Get(), nullptr, &m_VkSurface) != VkResult::VK_SUCCESS)
+    {
+        VKL_CRITICAL("Failed to create VkSurface!");
+        exit(1);
+    }
+    VKL_TRACE("Created VkSurface successfully");
+}
+
+void VulkanApp::DestroySurface()
+{
+    vkDestroySurfaceKHR(m_VkInstance, m_VkSurface, nullptr);
+    VKL_TRACE("VkSurface destroyed");
 }
