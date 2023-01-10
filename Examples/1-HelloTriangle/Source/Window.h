@@ -1,6 +1,8 @@
 #ifndef VULKANLEARNING_WINDOW
 #define VULKANLEARNING_WINDOW
 
+#include <utility>
+
 struct GLFWwindow;
 
 class Window
@@ -17,15 +19,14 @@ public:
 
     GLFWwindow *Get() const;
 
-    int GetWidth() const { return m_Width; }
-    int GetHeight() const { return m_Height; }
+    std::pair<int, int> GetFramebufferSize() const;
+    int                 GetWidth() const { return GetFramebufferSize().first; }
+    int                 GetHeight() const { return GetFramebufferSize().second; }
 
     char const *GetTitle() const { return m_Title; }
 
 private:
     GLFWwindow *m_Window = nullptr;
-    int         m_Width  = 0;
-    int         m_Height = 0;
     char const *m_Title  = nullptr;
     static int  s_NumInstances;
 };

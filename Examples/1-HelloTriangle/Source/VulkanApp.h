@@ -3,6 +3,7 @@
 
 #include "Log.h"
 #include "QueueFamilyIndices.h"
+#include "SwapChainSupportDetails.h"
 #include "Window.h"
 
 #include <vulkan/vulkan.h>
@@ -42,14 +43,22 @@ private:
     // VK_PHYSICAL_DEVICE
     void SelectPhysicalDevice();
 
-    std::vector<VkPhysicalDevice> GetPhysicalDevices() const;
-    VkPhysicalDeviceProperties    GetPhysicalDeviceProperties(VkPhysicalDevice PhysicalDevice) const;
-    VkPhysicalDeviceFeatures      GetPhysicalDeviceFeatures(VkPhysicalDevice PhysicalDevice) const;
-    VkPhysicalDevice GetMostSuitableDevice(std::vector<VkPhysicalDevice> const &PhysicalDevices) const;
-    uint32_t         GetDeviceSuitability(VkPhysicalDevice PhysicalDevice) const;
+    std::vector<VkPhysicalDevice>      GetPhysicalDevices() const;
+    VkPhysicalDeviceProperties         GetPhysicalDeviceProperties(VkPhysicalDevice PhysicalDevice) const;
+    VkPhysicalDeviceFeatures           GetPhysicalDeviceFeatures(VkPhysicalDevice PhysicalDevice) const;
+    std::vector<VkExtensionProperties> GetPhysicalDeviceSupportedExtensions(VkPhysicalDevice PhysicalDevice
+    ) const;
+
+    VkPhysicalDevice GetMostSuitablePhysicalDevice(std::vector<VkPhysicalDevice> const &PhysicalDevices
+    ) const;
+
+    bool     IsPhysicalDeviceSuitable(VkPhysicalDevice PhysicalDevice) const;
+    bool     IsPhysicalDeviceExtensionSupportComplete(VkPhysicalDevice PhysicalDevice) const;
+    uint32_t GetPhysicalDeviceSuitability(VkPhysicalDevice PhysicalDevice) const;
 
     void LogPhysicalDevices() const;
     void LogPhysicalDevice(VkPhysicalDevice PhysicalDevice) const;
+    void LogPhysicalDeviceSupportedExtensions(VkPhysicalDevice PhysicalDevice) const;
     // !VK_PHYSICAL_DEVICE
     //=========================================================================================================
     // VK_QUEUE_FAMILY
@@ -90,7 +99,7 @@ private:
     std::vector<char const *> GetRequiredDeviceValidationLayers(
     ) const; // Ignored by newer Vulkan versions and uses Layers from VkInstance, left for compatibility
 
-    void RetrieveQueuesFromCreatedDevice();
+    void RetrieveQueuesFromDevice();
     // !VK_DEVICE
     //=========================================================================================================
     // VK_DEBUG_RELATED
@@ -109,6 +118,21 @@ private:
     void CreateSurface();
     void DestroySurface();
     // !VK_KHR_SURFACE
+    //=========================================================================================================
+    // VK_KHR_SWAPCHAIN
+    SwapChainSupportDetails GetSwapChainSupportDetails(VkPhysicalDevice PhysicalDevice, VkSurfaceKHR Surface)
+        const;
+
+    VkExtent2D         SelectSwapChainExtent(VkSurfaceCapabilitiesKHR const &Capabilities) const;
+    VkSurfaceFormatKHR SelectSwapChainSurfaceFormat(std::vector<VkSurfaceFormatKHR> const &Formats) const;
+    VkPresentModeKHR   SelectSwapChainPresentationMode(std::vector<VkPresentModeKHR> const &Modes) const;
+    uint32_t           SelectSwapChainImagesCount(VkSurfaceCapabilitiesKHR const &Capabilities) const;
+
+    void CreateSwapChain();
+    void DestroySwapChain();
+
+    void RetrieveSwapChainImages();
+    // !VK_KHR_SWAPCHAIN
 
 private:
     Window m_Window;
@@ -122,7 +146,9 @@ private:
     VkQueue  m_GraphicsQueue{};
     VkQueue  m_PresentationQueue{};
 
-    VkSurfaceKHR m_VkSurface{};
+    VkSurfaceKHR         m_VkSurface{};
+    VkSwapchainKHR       m_VkSwapChain{};
+    std::vector<VkImage> m_SwapChainImages;
 
     VkDebugUtilsMessengerEXT m_VkDebugMessenger{};
 };

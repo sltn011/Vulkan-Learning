@@ -9,7 +9,7 @@
 
 int Window::s_NumInstances = 0;
 
-Window::Window(int Width, int Height, char const *Title) : m_Width{Width}, m_Height{Height}, m_Title{Title}
+Window::Window(int Width, int Height, char const *Title) : m_Title{Title}
 {
     if (!s_NumInstances)
     {
@@ -24,14 +24,14 @@ Window::Window(int Width, int Height, char const *Title) : m_Width{Width}, m_Hei
 
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API); // no need to create OpenGL context for Vulkan
     glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);   // needs more complex logic than needed here
-    m_Window = glfwCreateWindow(m_Width, m_Height, m_Title, nullptr, nullptr);
+    m_Window = glfwCreateWindow(Width, Height, m_Title, nullptr, nullptr);
     if (!m_Window)
     {
         VKL_CRITICAL("Failed to create GLFW Window!");
         exit(1);
     }
 
-    VKL_INFO("Window {} ({}, {}) created", m_Title, m_Width, m_Height);
+    VKL_INFO("Window {} ({}, {}) created", m_Title, Width, Height);
 }
 
 Window::~Window()
@@ -66,4 +66,11 @@ Window &Window::operator=(Window &&Rhs) noexcept
 GLFWwindow *Window::Get() const
 {
     return m_Window;
+}
+
+std::pair<int, int> Window::GetFramebufferSize() const
+{
+    std::pair<int, int> FramebufferSize;
+    glfwGetFramebufferSize(m_Window, &FramebufferSize.first, &FramebufferSize.second);
+    return FramebufferSize;
 }
