@@ -51,6 +51,7 @@ void VulkanApp::InitVulkan()
     RetrieveQueuesFromDevice();
     CreateSwapChain();
     RetrieveSwapChainImages();
+    CreateSwapChainImagesViews();
 
     VKL_INFO("Vulkan initialized");
 }
@@ -67,6 +68,7 @@ void VulkanApp::CleanUp()
 {
     VKL_INFO("VulkanApp is stopping...");
 
+    DestroySwapChainImagesViews();
     DestroySwapChain();
     DestroyDevice();
     DestroySurface();
@@ -938,6 +940,8 @@ void VulkanApp::CreateSwapChain()
     VkSurfaceFormatKHR const Format      = SelectSwapChainSurfaceFormat(SupportDetails.SurfaceFormats);
     VkPresentModeKHR const   PresentMode = SelectSwapChainPresentationMode(SupportDetails.PresentationMode);
 
+    m_SwapChainImageFormat = Format.format;
+
     VkSwapchainCreateInfoKHR CreateInfo{};
     CreateInfo.sType            = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
     CreateInfo.surface          = m_VkSurface;
@@ -994,4 +998,45 @@ void VulkanApp::RetrieveSwapChainImages()
     vkGetSwapchainImagesKHR(m_VkDevice, m_VkSwapChain, &SwapChainImagesCount, m_SwapChainImages.data());
 
     VKL_TRACE("Retrieved VkImages from VkSwapchain");
+}
+
+void VulkanApp::CreateSwapChainImagesViews()
+{
+    m_SwapChainImagesViews.resize(m_SwapChainImages.size());
+    for (size_t i = 0; i < m_SwapChainImages.size(); ++i)
+    {
+        VkImageViewCreateInfo CreateInfo{};
+        CreateInfo.sType    = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        CreateInfo.image    = m_SwapChainImages[i];
+        CreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        CreateInfo.format   = m_SwapChainImageFormat;
+
+        CreateInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY; // Default mapping
+        CreateInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+        CreateInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+        CreateInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+
+        CreateInfo.subresourceRange.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
+        CreateInfo.subresourceRange.baseMipLevel   = 0;
+        CreateInfo.subresourceRange.levelCount     = 1;
+        CreateInfo.subresourceRange.baseArrayLayer = 0;
+        CreateInfo.subresourceRange.layerCount     = 1;
+
+        if (vkCreateImageView(m_VkDevice, &CreateInfo, nullptr, &m_SwapChainImagesViews[i]) !=
+            VkResult::VK_SUCCESS)
+        {
+            VKL_CRITICAL("Failed to create VkImageView!");
+            exit(1);
+        }
+    }
+    VKL_TRACE("Created VkImageViews successfully");
+}
+
+void VulkanApp::DestroySwapChainImagesViews()
+{
+    for (VkImageView const &ImageView : m_SwapChainImagesViews)
+    {
+        vkDestroyImageView(m_VkDevice, ImageView, nullptr);
+    }
+    VKL_TRACE("VkImageViews destroyed");
 }

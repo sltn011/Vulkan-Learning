@@ -133,6 +133,11 @@ private:
 
     void RetrieveSwapChainImages();
     // !VK_KHR_SWAPCHAIN
+    //=========================================================================================================
+    // VK_IMAGE_VIEW
+    void CreateSwapChainImagesViews();
+    void DestroySwapChainImagesViews();
+    // !VK_IMAGE_VIEW
 
 private:
     Window m_Window;
@@ -146,9 +151,11 @@ private:
     VkQueue  m_GraphicsQueue{};
     VkQueue  m_PresentationQueue{};
 
-    VkSurfaceKHR         m_VkSurface{};
-    VkSwapchainKHR       m_VkSwapChain{};
-    std::vector<VkImage> m_SwapChainImages;
+    VkSurfaceKHR             m_VkSurface{};
+    VkSwapchainKHR           m_VkSwapChain{};
+    VkFormat                 m_SwapChainImageFormat{};
+    std::vector<VkImage>     m_SwapChainImages;
+    std::vector<VkImageView> m_SwapChainImagesViews;
 
     VkDebugUtilsMessengerEXT m_VkDebugMessenger{};
 };
