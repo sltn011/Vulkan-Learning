@@ -6,6 +6,9 @@
 #include "SwapChainSupportDetails.h"
 #include "Window.h"
 
+#include <filesystem>
+
+// Vulkan Header
 #include <vulkan/vulkan.h>
 
 class VulkanApp
@@ -138,6 +141,59 @@ private:
     void CreateSwapChainImagesViews();
     void DestroySwapChainImagesViews();
     // !VK_IMAGE_VIEW
+    //=========================================================================================================
+    // VK_PIPELINE
+
+    // Programmable Stages
+    VkPipelineShaderStageCreateInfo GetVertexShaderStageInfo(VkShaderModule ShaderModule) const;
+    VkPipelineShaderStageCreateInfo GetFragmentShaderStageInfo(VkShaderModule ShaderModule) const;
+
+    // Fixed Stages
+    VkPipelineVertexInputStateCreateInfo   GetVertexInputStateInfo() const;
+    VkPipelineInputAssemblyStateCreateInfo GetInputAssemblyStateInfo() const;
+
+    // Static Viewport and Scissor
+    VkViewport GetStaticViewportInfo() const;
+    VkRect2D   GetStaticScissorInfo() const;
+
+    // Dynamic Viewport and Scissors
+    std::pair<VkPipelineDynamicStateCreateInfo, std::vector<VkDynamicState>> GetDynamicStateInfo() const;
+
+    // Viewport
+    VkPipelineViewportStateCreateInfo GetStaticViewportStateInfo(
+        VkViewport const *Viewport, VkRect2D const *Scissor
+    ) const;
+    VkPipelineViewportStateCreateInfo GetDynamicViewportStateInfo() const;
+
+    // Rasterizer
+    VkPipelineRasterizationStateCreateInfo GetRasterizerStateInfo() const;
+
+    // Multisampler
+    VkPipelineMultisampleStateCreateInfo GetMultisamplerStateInfo() const;
+
+    // Depth and Stencil Tests
+    // Not needed here
+
+    // Color Blending
+    VkPipelineColorBlendAttachmentState GetColorBlendAttachment() const;
+    VkPipelineColorBlendStateCreateInfo GetColorBlendStateInfo(
+        VkPipelineColorBlendAttachmentState const *ColorBlendAttachment
+    ) const;
+
+    // Pipeline layout
+    void CreatePipelineLayout();
+    void DestroyPipelineLayout();
+
+    void CreateGraphicsPipeline();
+    void DestroyGraphicsPipeline();
+    // !VK_PIPELINE
+    //=========================================================================================================
+    // VK_SPIRV_SHADER
+    std::vector<char> ReadSPIRVByteCode(std::filesystem::path const &FilePath) const;
+
+    VkShaderModule CreateShaderModule(std::vector<char> const &SPIRVByteCode) const;
+    void           DestroyShaderModule(VkShaderModule ShaderModule) const;
+    // !VK_SPIRV_SHADER
 
 private:
     Window m_Window;
@@ -153,9 +209,12 @@ private:
 
     VkSurfaceKHR             m_VkSurface{};
     VkSwapchainKHR           m_VkSwapChain{};
+    VkExtent2D               m_SwapChainExtent{};
     VkFormat                 m_SwapChainImageFormat{};
     std::vector<VkImage>     m_SwapChainImages;
     std::vector<VkImageView> m_SwapChainImagesViews;
+
+    VkPipelineLayout m_VkPipelineLayout{};
 
     VkDebugUtilsMessengerEXT m_VkDebugMessenger{};
 };

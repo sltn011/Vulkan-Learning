@@ -7,6 +7,7 @@
 // #include <vulkan/vulkan.h> - redundant, included by GLFW
 
 #include <cstdint>
+#include <fstream>
 #include <string>
 #include <unordered_set>
 #include <vector>
@@ -53,11 +54,15 @@ void VulkanApp::InitVulkan()
     RetrieveSwapChainImages();
     CreateSwapChainImagesViews();
 
+    CreatePipelineLayout();
+    CreateGraphicsPipeline();
+
     VKL_INFO("Vulkan initialized");
 }
 
 void VulkanApp::AppLoop()
 {
+    VKL_INFO("VulkanApp running");
     while (!glfwWindowShouldClose(m_Window.Get()))
     {
         glfwPollEvents();
@@ -68,6 +73,7 @@ void VulkanApp::CleanUp()
 {
     VKL_INFO("VulkanApp is stopping...");
 
+    DestroyPipelineLayout();
     DestroySwapChainImagesViews();
     DestroySwapChain();
     DestroyDevice();
@@ -102,7 +108,7 @@ void VulkanApp::CreateVkInstance()
     InstanceCreateInfo.enabledLayerCount       = static_cast<uint32_t>(ValidationLayers.size());
     InstanceCreateInfo.ppEnabledLayerNames     = ValidationLayers.data();
 
-    if (vkCreateInstance(&InstanceCreateInfo, nullptr, &m_VkInstance) != VkResult::VK_SUCCESS)
+    if (vkCreateInstance(&InstanceCreateInfo, nullptr, &m_VkInstance) != VK_SUCCESS)
     {
         VKL_CRITICAL("Failed to create VkInstance!");
         exit(1);
@@ -826,7 +832,7 @@ VkBool32 VulkanApp::DebugCallback(
 
 void VulkanApp::CreateSurface()
 {
-    if (glfwCreateWindowSurface(m_VkInstance, m_Window.Get(), nullptr, &m_VkSurface) != VkResult::VK_SUCCESS)
+    if (glfwCreateWindowSurface(m_VkInstance, m_Window.Get(), nullptr, &m_VkSurface) != VK_SUCCESS)
     {
         VKL_CRITICAL("Failed to create VkSurface!");
         exit(1);
@@ -940,6 +946,7 @@ void VulkanApp::CreateSwapChain()
     VkSurfaceFormatKHR const Format      = SelectSwapChainSurfaceFormat(SupportDetails.SurfaceFormats);
     VkPresentModeKHR const   PresentMode = SelectSwapChainPresentationMode(SupportDetails.PresentationMode);
 
+    m_SwapChainExtent      = Extent;
     m_SwapChainImageFormat = Format.format;
 
     VkSwapchainCreateInfoKHR CreateInfo{};
@@ -975,7 +982,7 @@ void VulkanApp::CreateSwapChain()
     CreateInfo.clipped        = VK_TRUE; // Ignore obstructed pixels
     CreateInfo.oldSwapchain   = VK_NULL_HANDLE;
 
-    if (vkCreateSwapchainKHR(m_VkDevice, &CreateInfo, nullptr, &m_VkSwapChain) != VkResult::VK_SUCCESS)
+    if (vkCreateSwapchainKHR(m_VkDevice, &CreateInfo, nullptr, &m_VkSwapChain) != VK_SUCCESS)
     {
         VKL_CRITICAL("Failed to create VkSwapchain!");
         exit(1);
@@ -1022,8 +1029,7 @@ void VulkanApp::CreateSwapChainImagesViews()
         CreateInfo.subresourceRange.baseArrayLayer = 0;
         CreateInfo.subresourceRange.layerCount     = 1;
 
-        if (vkCreateImageView(m_VkDevice, &CreateInfo, nullptr, &m_SwapChainImagesViews[i]) !=
-            VkResult::VK_SUCCESS)
+        if (vkCreateImageView(m_VkDevice, &CreateInfo, nullptr, &m_SwapChainImagesViews[i]) != VK_SUCCESS)
         {
             VKL_CRITICAL("Failed to create VkImageView!");
             exit(1);
@@ -1039,4 +1045,276 @@ void VulkanApp::DestroySwapChainImagesViews()
         vkDestroyImageView(m_VkDevice, ImageView, nullptr);
     }
     VKL_TRACE("VkImageViews destroyed");
+}
+
+VkPipelineShaderStageCreateInfo VulkanApp::GetVertexShaderStageInfo(VkShaderModule ShaderModule) const
+{
+    VkPipelineShaderStageCreateInfo VertexShaderStageInfo{};
+    VertexShaderStageInfo.sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    VertexShaderStageInfo.stage  = VK_SHADER_STAGE_VERTEX_BIT;
+    VertexShaderStageInfo.module = ShaderModule;
+    VertexShaderStageInfo.pName  = "main";
+    // VertexShaderStageInfo.pSpecializationInfo = nullptr; for configuration variables
+
+    return VertexShaderStageInfo;
+}
+
+VkPipelineShaderStageCreateInfo VulkanApp::GetFragmentShaderStageInfo(VkShaderModule ShaderModule) const
+{
+    VkPipelineShaderStageCreateInfo FragmentShaderStageInfo{};
+    FragmentShaderStageInfo.sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    FragmentShaderStageInfo.stage  = VK_SHADER_STAGE_FRAGMENT_BIT;
+    FragmentShaderStageInfo.module = ShaderModule;
+    FragmentShaderStageInfo.pName  = "main";
+
+    return FragmentShaderStageInfo;
+}
+
+VkPipelineVertexInputStateCreateInfo VulkanApp::GetVertexInputStateInfo() const
+{
+    VkPipelineVertexInputStateCreateInfo VertexInputStageInfo{};
+    VertexInputStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+    VertexInputStageInfo.vertexBindingDescriptionCount   = 0; // Zeroes bcz vertex info hardcoded in shader
+    VertexInputStageInfo.pVertexBindingDescriptions      = nullptr;
+    VertexInputStageInfo.vertexAttributeDescriptionCount = 0;
+    VertexInputStageInfo.pVertexAttributeDescriptions    = nullptr;
+
+    return VertexInputStageInfo;
+}
+
+VkPipelineInputAssemblyStateCreateInfo VulkanApp::GetInputAssemblyStateInfo() const
+{
+    VkPipelineInputAssemblyStateCreateInfo InputAssemblyStageInfo{};
+    InputAssemblyStageInfo.sType    = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+    InputAssemblyStageInfo.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+    InputAssemblyStageInfo.primitiveRestartEnable = VK_FALSE;
+
+    return InputAssemblyStageInfo;
+}
+
+VkViewport VulkanApp::GetStaticViewportInfo() const
+{
+    VkViewport Viewport{};
+    Viewport.x        = 0.0f;
+    Viewport.y        = 0.0f;
+    Viewport.width    = static_cast<float>(m_SwapChainExtent.width);
+    Viewport.height   = static_cast<float>(m_SwapChainExtent.height);
+    Viewport.minDepth = 0.0f;
+    Viewport.maxDepth = 1.0f;
+    return Viewport;
+}
+
+VkRect2D VulkanApp::GetStaticScissorInfo() const
+{
+    VkRect2D Scissor{};
+    Scissor.offset = {0, 0};
+    Scissor.extent = m_SwapChainExtent;
+    return Scissor;
+}
+
+std::pair<VkPipelineDynamicStateCreateInfo, std::vector<VkDynamicState>> VulkanApp::GetDynamicStateInfo(
+) const
+{
+    std::vector<VkDynamicState>      DynamicStates = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
+    VkPipelineDynamicStateCreateInfo DynamicStateInfo{};
+    DynamicStateInfo.sType             = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+    DynamicStateInfo.dynamicStateCount = static_cast<uint32_t>(DynamicStates.size());
+    DynamicStateInfo.pDynamicStates    = DynamicStates.data();
+
+    return {DynamicStateInfo, std::move(DynamicStates)};
+}
+
+VkPipelineViewportStateCreateInfo VulkanApp::GetStaticViewportStateInfo(
+    VkViewport const *Viewport, VkRect2D const *Scissor
+) const
+{
+    VkPipelineViewportStateCreateInfo ViewportState{};
+    ViewportState.sType         = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+    ViewportState.viewportCount = 1;
+    ViewportState.pViewports    = Viewport;
+    ViewportState.scissorCount  = 1;
+    ViewportState.pScissors     = Scissor;
+    return ViewportState;
+}
+
+VkPipelineViewportStateCreateInfo VulkanApp::GetDynamicViewportStateInfo() const
+{
+    VkPipelineViewportStateCreateInfo ViewportState{};
+    ViewportState.sType         = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+    ViewportState.viewportCount = 1;
+    ViewportState.pViewports    = nullptr; // ignored if dynamic
+    ViewportState.scissorCount  = 1;
+    ViewportState.pScissors     = nullptr; // ignored if dynamic
+    return ViewportState;
+}
+
+VkPipelineRasterizationStateCreateInfo VulkanApp::GetRasterizerStateInfo() const
+{
+    VkPipelineRasterizationStateCreateInfo RasterizerStageInfo{};
+    RasterizerStageInfo.sType                   = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+    RasterizerStageInfo.depthClampEnable        = VK_FALSE;
+    RasterizerStageInfo.rasterizerDiscardEnable = VK_FALSE;
+    RasterizerStageInfo.polygonMode             = VK_POLYGON_MODE_FILL;
+    RasterizerStageInfo.lineWidth               = 1.0f;
+    RasterizerStageInfo.cullMode                = VK_CULL_MODE_BACK_BIT;
+    RasterizerStageInfo.frontFace               = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    RasterizerStageInfo.depthBiasEnable         = VK_FALSE;
+    RasterizerStageInfo.depthBiasConstantFactor = 0.0f; // optional
+    RasterizerStageInfo.depthBiasClamp          = 0.0f; // optional
+    RasterizerStageInfo.depthBiasSlopeFactor    = 0.0f; // optional
+
+    return RasterizerStageInfo;
+}
+
+VkPipelineMultisampleStateCreateInfo VulkanApp::GetMultisamplerStateInfo() const
+{
+    VkPipelineMultisampleStateCreateInfo MultisamplerStateInfo{};
+    MultisamplerStateInfo.sType                 = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+    MultisamplerStateInfo.sampleShadingEnable   = VK_FALSE;
+    MultisamplerStateInfo.rasterizationSamples  = VK_SAMPLE_COUNT_1_BIT;
+    MultisamplerStateInfo.minSampleShading      = 1.0f;     // optional
+    MultisamplerStateInfo.pSampleMask           = nullptr;  // optional
+    MultisamplerStateInfo.alphaToCoverageEnable = VK_FALSE; // optional
+    MultisamplerStateInfo.alphaToOneEnable      = VK_FALSE; // optional
+
+    return MultisamplerStateInfo;
+}
+
+VkPipelineColorBlendAttachmentState VulkanApp::GetColorBlendAttachment() const
+{
+    VkPipelineColorBlendAttachmentState ColorBlendAttachment{};
+    ColorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+                                          VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+    ColorBlendAttachment.blendEnable         = VK_FALSE;
+    ColorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;  // optional
+    ColorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO; // optional
+    ColorBlendAttachment.colorBlendOp        = VK_BLEND_OP_ADD;      // optional
+    ColorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;  // optional
+    ColorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO; // optional
+    ColorBlendAttachment.alphaBlendOp        = VK_BLEND_OP_ADD;      // optional
+
+    return ColorBlendAttachment;
+}
+
+VkPipelineColorBlendStateCreateInfo VulkanApp::GetColorBlendStateInfo(
+    VkPipelineColorBlendAttachmentState const *ColorBlendAttachment
+) const
+{
+    VkPipelineColorBlendStateCreateInfo ColorBlendState{};
+    ColorBlendState.sType             = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+    ColorBlendState.logicOpEnable     = VK_FALSE;
+    ColorBlendState.logicOp           = VK_LOGIC_OP_COPY; // optional
+    ColorBlendState.attachmentCount   = 1;
+    ColorBlendState.pAttachments      = ColorBlendAttachment;
+    ColorBlendState.blendConstants[0] = 0.0f; // optional
+    ColorBlendState.blendConstants[1] = 0.0f; // optional
+    ColorBlendState.blendConstants[2] = 0.0f; // optional
+    ColorBlendState.blendConstants[3] = 0.0f; // optional
+
+    return ColorBlendState;
+}
+
+void VulkanApp::CreatePipelineLayout()
+{
+    VkPipelineLayoutCreateInfo PipelineLayoutInfo{};
+    PipelineLayoutInfo.sType                  = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    PipelineLayoutInfo.setLayoutCount         = 0;       // optional
+    PipelineLayoutInfo.pSetLayouts            = nullptr; // optional
+    PipelineLayoutInfo.pushConstantRangeCount = 0;       // optional
+    PipelineLayoutInfo.pPushConstantRanges    = nullptr; // optional
+
+    if (vkCreatePipelineLayout(m_VkDevice, &PipelineLayoutInfo, nullptr, &m_VkPipelineLayout) != VK_SUCCESS)
+    {
+        VKL_CRITICAL("Failed to create VkPipelineLayout!");
+        exit(1);
+    }
+    VKL_TRACE("Created VkPipelineLayout successfully");
+}
+
+void VulkanApp::DestroyPipelineLayout()
+{
+    vkDestroyPipelineLayout(m_VkDevice, m_VkPipelineLayout, nullptr);
+    VKL_TRACE("VkPipelineLayout destroyed");
+}
+
+void VulkanApp::CreateGraphicsPipeline()
+{
+    // Programmable stages
+    std::vector<char> VertexShaderByteCode   = ReadSPIRVByteCode("./Assets/Shaders/vert.spv");
+    std::vector<char> FragmentShaderByteCode = ReadSPIRVByteCode("./Assets/Shaders/frag.spv");
+
+    VkShaderModule VertexShaderModule   = CreateShaderModule(VertexShaderByteCode);
+    VkShaderModule FragmentShaderModule = CreateShaderModule(FragmentShaderByteCode);
+
+    VkPipelineShaderStageCreateInfo VertexShaderStageInfo = GetVertexShaderStageInfo(VertexShaderModule);
+    VkPipelineShaderStageCreateInfo FragmentShaderStageInfo =
+        GetFragmentShaderStageInfo(FragmentShaderModule);
+
+    VkPipelineShaderStageCreateInfo ShaderStagesInfo[] = {VertexShaderStageInfo, FragmentShaderStageInfo};
+
+    // Fixed stages
+    VkPipelineVertexInputStateCreateInfo VertexInputStageInfo = GetVertexInputStateInfo();
+
+    VkPipelineInputAssemblyStateCreateInfo InputAssemblyStageInfo = GetInputAssemblyStateInfo();
+
+    // Dynamic Viewport and Scissor
+    auto [DynamicStateInfo, DynamicStates] = GetDynamicStateInfo(); // TODO: check reference being correct!!
+
+    VkPipelineViewportStateCreateInfo ViewportState = GetDynamicViewportStateInfo();
+
+    // Rasterizer
+    VkPipelineRasterizationStateCreateInfo RasterizerStageInfo = GetRasterizerStateInfo();
+
+    // Multisampling
+    VkPipelineMultisampleStateCreateInfo MultisamplerStateInfo = GetMultisamplerStateInfo();
+
+    // Depth and Stencil tests
+    // Not needed - pass nullptr
+
+    // Color blending
+    VkPipelineColorBlendAttachmentState ColorBlendAttachment = GetColorBlendAttachment();
+
+    VkPipelineColorBlendStateCreateInfo ColorBlendState = GetColorBlendStateInfo(&ColorBlendAttachment);
+
+    DestroyShaderModule(FragmentShaderModule);
+    DestroyShaderModule(VertexShaderModule);
+}
+
+void VulkanApp::DestroyGraphicsPipeline()
+{
+}
+
+std::vector<char> VulkanApp::ReadSPIRVByteCode(std::filesystem::path const &FilePath) const
+{
+    std::ifstream File(FilePath, std::ios::ate | std::ios::binary);
+
+    size_t            FileSize = static_cast<size_t>(File.tellg());
+    std::vector<char> ByteCode(FileSize);
+
+    File.seekg(0);
+    File.read(ByteCode.data(), FileSize);
+
+    return ByteCode;
+}
+
+VkShaderModule VulkanApp::CreateShaderModule(std::vector<char> const &SPIRVByteCode) const
+{
+    VkShaderModuleCreateInfo CreateInfo{};
+
+    CreateInfo.sType    = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+    CreateInfo.codeSize = SPIRVByteCode.size();
+    CreateInfo.pCode    = reinterpret_cast<uint32_t const *>(SPIRVByteCode.data());
+
+    VkShaderModule ShaderModule{};
+    if (vkCreateShaderModule(m_VkDevice, &CreateInfo, nullptr, &ShaderModule) != VK_SUCCESS)
+    {
+        VKL_CRITICAL("Failed to create VkShaderModule!");
+        exit(1);
+    }
+    return ShaderModule;
+}
+
+void VulkanApp::DestroyShaderModule(VkShaderModule ShaderModule) const
+{
+    vkDestroyShaderModule(m_VkDevice, ShaderModule, nullptr);
 }
