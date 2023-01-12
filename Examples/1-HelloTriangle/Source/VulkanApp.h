@@ -188,8 +188,8 @@ private:
     void CreatePipelineLayout();
     void DestroyPipelineLayout();
 
-    void CreateGraphicsPipeline();
-    void DestroyGraphicsPipeline();
+    void CreatePipeline();
+    void DestroyPipeline();
     // !VK_PIPELINE
     //=========================================================================================================
     // VK_SPIRV_SHADER
@@ -220,6 +220,7 @@ private:
 
     VkRenderPass     m_VkRenderPass{};
     VkPipelineLayout m_VkPipelineLayout{};
+    VkPipeline       m_VkPipeline{};
 
     VkDebugUtilsMessengerEXT m_VkDebugMessenger{};
 };

@@ -59,7 +59,7 @@ void VulkanApp::InitVulkan()
 
     CreateRenderPass();
     CreatePipelineLayout();
-    CreateGraphicsPipeline();
+    CreatePipeline();
 
     VKL_INFO("Vulkan initialized");
 }
@@ -77,6 +77,7 @@ void VulkanApp::CleanUp()
 {
     VKL_INFO("VulkanApp is stopping...");
 
+    DestroyPipeline();
     DestroyPipelineLayout();
     DestroyRenderPass();
 
@@ -1288,7 +1289,7 @@ void VulkanApp::DestroyPipelineLayout()
     VKL_TRACE("VkPipelineLayout destroyed");
 }
 
-void VulkanApp::CreateGraphicsPipeline()
+void VulkanApp::CreatePipeline()
 {
     // Programmable stages
     std::vector<char> VertexShaderByteCode   = ReadSPIRVByteCode("./Assets/Shaders/vert.spv");
@@ -1304,8 +1305,7 @@ void VulkanApp::CreateGraphicsPipeline()
     VkPipelineShaderStageCreateInfo ShaderStagesInfo[] = {VertexShaderStageInfo, FragmentShaderStageInfo};
 
     // Fixed stages
-    VkPipelineVertexInputStateCreateInfo VertexInputStageInfo = GetVertexInputStateInfo();
-
+    VkPipelineVertexInputStateCreateInfo   VertexInputStageInfo   = GetVertexInputStateInfo();
     VkPipelineInputAssemblyStateCreateInfo InputAssemblyStageInfo = GetInputAssemblyStateInfo();
 
     // Dynamic Viewport and Scissor
@@ -1324,15 +1324,54 @@ void VulkanApp::CreateGraphicsPipeline()
 
     // Color blending
     VkPipelineColorBlendAttachmentState ColorBlendAttachment = GetColorBlendAttachment();
+    VkPipelineColorBlendStateCreateInfo ColorBlendState      = GetColorBlendStateInfo(&ColorBlendAttachment);
 
-    VkPipelineColorBlendStateCreateInfo ColorBlendState = GetColorBlendStateInfo(&ColorBlendAttachment);
+    // Pipeline creation
+    VkGraphicsPipelineCreateInfo PipelineCreateInfo{};
+    PipelineCreateInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+
+    // Programmable stages
+    PipelineCreateInfo.stageCount = 2;
+    PipelineCreateInfo.pStages    = ShaderStagesInfo;
+
+    // Fixed stages
+    PipelineCreateInfo.pVertexInputState   = &VertexInputStageInfo;
+    PipelineCreateInfo.pInputAssemblyState = &InputAssemblyStageInfo;
+    PipelineCreateInfo.pDynamicState       = &DynamicStateInfo;
+    PipelineCreateInfo.pViewportState      = &ViewportState;
+    PipelineCreateInfo.pRasterizationState = &RasterizerStageInfo;
+    PipelineCreateInfo.pMultisampleState   = &MultisamplerStateInfo;
+    PipelineCreateInfo.pDepthStencilState  = nullptr;
+    PipelineCreateInfo.pColorBlendState    = &ColorBlendState;
+
+    // Uniforms and push-constants specified in layout
+    PipelineCreateInfo.layout = m_VkPipelineLayout;
+
+    // RenderPass and it's Subpass in which Pipeline is used
+    PipelineCreateInfo.renderPass = m_VkRenderPass;
+    PipelineCreateInfo.subpass    = 0;
+
+    PipelineCreateInfo.basePipelineHandle = VK_NULL_HANDLE;
+    PipelineCreateInfo.basePipelineIndex  = -1;
+
+    VkResult PipelineCreateResult =
+        vkCreateGraphicsPipelines(m_VkDevice, VK_NULL_HANDLE, 1, &PipelineCreateInfo, nullptr, &m_VkPipeline);
 
     DestroyShaderModule(FragmentShaderModule);
     DestroyShaderModule(VertexShaderModule);
+
+    if (PipelineCreateResult != VK_SUCCESS)
+    {
+        VKL_CRITICAL("Failed to create VkPipeline!");
+        exit(1);
+    }
+    VKL_TRACE("Created VkPipeline successfully");
 }
 
-void VulkanApp::DestroyGraphicsPipeline()
+void VulkanApp::DestroyPipeline()
 {
+    vkDestroyPipeline(m_VkDevice, m_VkPipeline, nullptr);
+    VKL_TRACE("VkPipeline destroyed");
 }
 
 std::vector<char> VulkanApp::ReadSPIRVByteCode(std::filesystem::path const &FilePath) const
