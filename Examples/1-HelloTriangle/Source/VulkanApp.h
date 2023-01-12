@@ -144,6 +144,10 @@ private:
     //=========================================================================================================
     // VK_PIPELINE
 
+    // Render Pass
+    void CreateRenderPass();
+    void DestroyRenderPass();
+
     // Programmable Stages
     VkPipelineShaderStageCreateInfo GetVertexShaderStageInfo(VkShaderModule ShaderModule) const;
     VkPipelineShaderStageCreateInfo GetFragmentShaderStageInfo(VkShaderModule ShaderModule) const;
@@ -214,6 +218,7 @@ private:
     std::vector<VkImage>     m_SwapChainImages;
     std::vector<VkImageView> m_SwapChainImagesViews;
 
+    VkRenderPass     m_VkRenderPass{};
     VkPipelineLayout m_VkPipelineLayout{};
 
     VkDebugUtilsMessengerEXT m_VkDebugMessenger{};

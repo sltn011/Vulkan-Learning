@@ -45,15 +45,19 @@ void VulkanApp::InitVulkan()
     LogSupportedValidationLayers();
 
     CreateVkInstance();
+
     CreateDebugCallback();
+
     CreateSurface();
     SelectPhysicalDevice();
     CreateDevice();
     RetrieveQueuesFromDevice();
+
     CreateSwapChain();
     RetrieveSwapChainImages();
     CreateSwapChainImagesViews();
 
+    CreateRenderPass();
     CreatePipelineLayout();
     CreateGraphicsPipeline();
 
@@ -74,11 +78,16 @@ void VulkanApp::CleanUp()
     VKL_INFO("VulkanApp is stopping...");
 
     DestroyPipelineLayout();
+    DestroyRenderPass();
+
     DestroySwapChainImagesViews();
     DestroySwapChain();
+
     DestroyDevice();
     DestroySurface();
+
     DestroyDebugCallback();
+
     DestroyVkInstance();
 
     VKL_INFO("VulkanApp resources cleaned up");
@@ -1045,6 +1054,48 @@ void VulkanApp::DestroySwapChainImagesViews()
         vkDestroyImageView(m_VkDevice, ImageView, nullptr);
     }
     VKL_TRACE("VkImageViews destroyed");
+}
+
+void VulkanApp::CreateRenderPass()
+{
+    VkAttachmentDescription ColorAttachment{};
+    ColorAttachment.format         = m_SwapChainImageFormat;
+    ColorAttachment.samples        = VK_SAMPLE_COUNT_1_BIT;
+    ColorAttachment.loadOp         = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    ColorAttachment.storeOp        = VK_ATTACHMENT_STORE_OP_STORE;
+    ColorAttachment.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    ColorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    ColorAttachment.initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED;
+    ColorAttachment.finalLayout    = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+    VkAttachmentReference ColorAttachmentRef{};
+    ColorAttachmentRef.attachment = 0; // referenced from frag shader with layout(location = 0) out
+    ColorAttachmentRef.layout     = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+    VkSubpassDescription Subpass{};
+    Subpass.pipelineBindPoint    = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    Subpass.colorAttachmentCount = 1;
+    Subpass.pColorAttachments    = &ColorAttachmentRef;
+
+    VkRenderPassCreateInfo RenderPassInfo{};
+    RenderPassInfo.sType           = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+    RenderPassInfo.attachmentCount = 1;
+    RenderPassInfo.pAttachments    = &ColorAttachment;
+    RenderPassInfo.subpassCount    = 1;
+    RenderPassInfo.pSubpasses      = &Subpass;
+
+    if (vkCreateRenderPass(m_VkDevice, &RenderPassInfo, nullptr, &m_VkRenderPass) != VK_SUCCESS)
+    {
+        VKL_CRITICAL("Failed to create VkRenderPass!");
+        exit(1);
+    }
+    VKL_TRACE("Created VkRenderPass successfully");
+}
+
+void VulkanApp::DestroyRenderPass()
+{
+    vkDestroyRenderPass(m_VkDevice, m_VkRenderPass, nullptr);
+    VKL_TRACE("VkRenderPass destroyed");
 }
 
 VkPipelineShaderStageCreateInfo VulkanApp::GetVertexShaderStageInfo(VkShaderModule ShaderModule) const
