@@ -1070,7 +1070,7 @@ void VulkanApp::CreateRenderPass()
     ColorAttachment.finalLayout    = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
     VkAttachmentReference ColorAttachmentRef{};
-    ColorAttachmentRef.attachment = 0; // referenced from frag shader with layout(location = 0) out
+    ColorAttachmentRef.attachment = 0; // index of attachment in pAttachments array in RenderPassInfo
     ColorAttachmentRef.layout     = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
     VkSubpassDescription Subpass{};
@@ -1081,9 +1081,9 @@ void VulkanApp::CreateRenderPass()
     VkRenderPassCreateInfo RenderPassInfo{};
     RenderPassInfo.sType           = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
     RenderPassInfo.attachmentCount = 1;
-    RenderPassInfo.pAttachments    = &ColorAttachment;
-    RenderPassInfo.subpassCount    = 1;
-    RenderPassInfo.pSubpasses      = &Subpass;
+    RenderPassInfo.pAttachments = &ColorAttachment; // index = frag shader val with layout(location = 0) out
+    RenderPassInfo.subpassCount = 1;
+    RenderPassInfo.pSubpasses   = &Subpass;
 
     if (vkCreateRenderPass(m_VkDevice, &RenderPassInfo, nullptr, &m_VkRenderPass) != VK_SUCCESS)
     {
