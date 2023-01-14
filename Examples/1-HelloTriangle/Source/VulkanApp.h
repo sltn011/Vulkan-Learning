@@ -198,6 +198,11 @@ private:
     VkShaderModule CreateShaderModule(std::vector<char> const &SPIRVByteCode) const;
     void           DestroyShaderModule(VkShaderModule ShaderModule) const;
     // !VK_SPIRV_SHADER
+    //=========================================================================================================
+    // VK_FRAMEBUFFER
+    void CreateFramebuffer();
+    void DestroyFramebuffer();
+    // !VK_FRAMEBUFFER
 
 private:
     Window m_Window;
@@ -221,6 +226,8 @@ private:
     VkRenderPass     m_VkRenderPass{};
     VkPipelineLayout m_VkPipelineLayout{};
     VkPipeline       m_VkPipeline{};
+
+    std::vector<VkFramebuffer> m_VkFramebuffers;
 
     VkDebugUtilsMessengerEXT m_VkDebugMessenger{};
 };

@@ -61,6 +61,8 @@ void VulkanApp::InitVulkan()
     CreatePipelineLayout();
     CreatePipeline();
 
+    CreateFramebuffer();
+
     VKL_INFO("Vulkan initialized");
 }
 
@@ -76,6 +78,8 @@ void VulkanApp::AppLoop()
 void VulkanApp::CleanUp()
 {
     VKL_INFO("VulkanApp is stopping...");
+
+    DestroyFramebuffer();
 
     DestroyPipeline();
     DestroyPipelineLayout();
@@ -1407,4 +1411,39 @@ VkShaderModule VulkanApp::CreateShaderModule(std::vector<char> const &SPIRVByteC
 void VulkanApp::DestroyShaderModule(VkShaderModule ShaderModule) const
 {
     vkDestroyShaderModule(m_VkDevice, ShaderModule, nullptr);
+}
+
+void VulkanApp::CreateFramebuffer()
+{
+    m_VkFramebuffers.resize(m_SwapChainImagesViews.size());
+
+    for (size_t i = 0; i < m_VkFramebuffers.size(); ++i)
+    {
+        VkImageView Attachments[] = {m_SwapChainImagesViews[i]};
+
+        VkFramebufferCreateInfo FramebufferInfo{};
+        FramebufferInfo.sType           = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+        FramebufferInfo.renderPass      = m_VkRenderPass;
+        FramebufferInfo.attachmentCount = 1;
+        FramebufferInfo.pAttachments    = Attachments;
+        FramebufferInfo.width           = m_SwapChainExtent.width;
+        FramebufferInfo.height          = m_SwapChainExtent.height;
+        FramebufferInfo.layers          = 1;
+
+        if (vkCreateFramebuffer(m_VkDevice, &FramebufferInfo, nullptr, &m_VkFramebuffers[i]) != VK_SUCCESS)
+        {
+            VKL_CRITICAL("Failed to create VkFramebuffer!");
+            exit(1);
+        }
+    }
+    VKL_TRACE("Created VkFramebuffers successfully");
+}
+
+void VulkanApp::DestroyFramebuffer()
+{
+    for (size_t i = 0; i < m_VkFramebuffers.size(); ++i)
+    {
+        vkDestroyFramebuffer(m_VkDevice, m_VkFramebuffers[i], nullptr);
+    }
+    VKL_TRACE("VkFramebuffers destroyed");
 }
