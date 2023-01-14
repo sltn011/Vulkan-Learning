@@ -3,7 +3,7 @@
 
 #include "Log.h"
 #include "QueueFamilyIndices.h"
-#include "SwapChainSupportDetails.h"
+#include "SwapchainSupportDetails.h"
 #include "Window.h"
 
 #include <filesystem>
@@ -22,6 +22,8 @@ private:
     void InitVulkan();
     void AppLoop();
     void CleanUp();
+
+    void DrawFrame();
 
 private:
     // Vulkan-specific methods
@@ -123,23 +125,23 @@ private:
     // !VK_KHR_SURFACE
     //=========================================================================================================
     // VK_KHR_SWAPCHAIN
-    SwapChainSupportDetails GetSwapChainSupportDetails(VkPhysicalDevice PhysicalDevice, VkSurfaceKHR Surface)
+    SwapchainSupportDetails GetSwapchainSupportDetails(VkPhysicalDevice PhysicalDevice, VkSurfaceKHR Surface)
         const;
 
-    VkExtent2D         SelectSwapChainExtent(VkSurfaceCapabilitiesKHR const &Capabilities) const;
-    VkSurfaceFormatKHR SelectSwapChainSurfaceFormat(std::vector<VkSurfaceFormatKHR> const &Formats) const;
-    VkPresentModeKHR   SelectSwapChainPresentationMode(std::vector<VkPresentModeKHR> const &Modes) const;
-    uint32_t           SelectSwapChainImagesCount(VkSurfaceCapabilitiesKHR const &Capabilities) const;
+    VkExtent2D         SelectSwapchainExtent(VkSurfaceCapabilitiesKHR const &Capabilities) const;
+    VkSurfaceFormatKHR SelectSwapchainSurfaceFormat(std::vector<VkSurfaceFormatKHR> const &Formats) const;
+    VkPresentModeKHR   SelectSwapchainPresentationMode(std::vector<VkPresentModeKHR> const &Modes) const;
+    uint32_t           SelectSwapchainImagesCount(VkSurfaceCapabilitiesKHR const &Capabilities) const;
 
-    void CreateSwapChain();
-    void DestroySwapChain();
+    void CreateSwapchain();
+    void DestroySwapchain();
 
-    void RetrieveSwapChainImages();
+    void RetrieveSwapchainImages();
     // !VK_KHR_SWAPCHAIN
     //=========================================================================================================
     // VK_IMAGE_VIEW
-    void CreateSwapChainImagesViews();
-    void DestroySwapChainImagesViews();
+    void CreateSwapchainImagesViews();
+    void DestroySwapchainImagesViews();
     // !VK_IMAGE_VIEW
     //=========================================================================================================
     // VK_PIPELINE
@@ -203,6 +205,22 @@ private:
     void CreateFramebuffer();
     void DestroyFramebuffer();
     // !VK_FRAMEBUFFER
+    //=========================================================================================================
+    // VK_COMMAND_BUFFER
+    void CreateCommandPool();
+    void DestroyCommandPool();
+
+    void AllocateCommandBuffer();
+
+    void RecordCommandBuffer(VkCommandBuffer CommandBuffer, uint32_t SwapchainImageIndex);
+    void SubmitCommandBuffer(VkCommandBuffer CommandBuffer);
+    void PresentResult(uint32_t SwapchainImageIndex);
+    // !VK_COMMAND_BUFFER
+    //=========================================================================================================
+    // VK_SYNC
+    void CreateSyncObjects();
+    void DestroySyncObjects();
+    // !VK_SYNC
 
 private:
     Window m_Window;
@@ -217,17 +235,24 @@ private:
     VkQueue  m_PresentationQueue{};
 
     VkSurfaceKHR             m_VkSurface{};
-    VkSwapchainKHR           m_VkSwapChain{};
-    VkExtent2D               m_SwapChainExtent{};
-    VkFormat                 m_SwapChainImageFormat{};
-    std::vector<VkImage>     m_SwapChainImages;
-    std::vector<VkImageView> m_SwapChainImagesViews;
+    VkSwapchainKHR           m_VkSwapchain{};
+    VkExtent2D               m_SwapchainExtent{};
+    VkFormat                 m_SwapchainImageFormat{};
+    std::vector<VkImage>     m_SwapchainImages;
+    std::vector<VkImageView> m_SwapchainImagesViews;
 
     VkRenderPass     m_VkRenderPass{};
     VkPipelineLayout m_VkPipelineLayout{};
     VkPipeline       m_VkPipeline{};
 
     std::vector<VkFramebuffer> m_VkFramebuffers;
+
+    VkCommandPool   m_VkCommandPool{};
+    VkCommandBuffer m_VkCommandBuffer{};
+
+    VkSemaphore m_ImageAvailableSemaphore{};
+    VkSemaphore m_RenderFinishedSemaphore{};
+    VkFence     m_InFlightFence{};
 
     VkDebugUtilsMessengerEXT m_VkDebugMessenger{};
 };

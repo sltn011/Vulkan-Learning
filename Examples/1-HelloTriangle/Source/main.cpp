@@ -3,6 +3,6 @@
 int main()
 {
     Log::Init();
-    VulkanApp App(500, 500);
+    VulkanApp App(800, 800);
     App.Run();
 }

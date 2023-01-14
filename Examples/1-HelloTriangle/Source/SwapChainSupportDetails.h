@@ -4,7 +4,7 @@
 #include <vector>
 #include <vulkan/vulkan.h>
 
-struct SwapChainSupportDetails
+struct SwapchainSupportDetails
 {
     VkSurfaceCapabilitiesKHR        SurfaceCapabilities;
     std::vector<VkSurfaceFormatKHR> SurfaceFormats;
