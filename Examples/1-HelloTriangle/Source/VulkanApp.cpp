@@ -6,12 +6,6 @@
 #include <GLFW/glfw3.h>
 // #include <vulkan/vulkan.h> - redundant, included by GLFW
 
-#include <cstdint>
-#include <fstream>
-#include <string>
-#include <unordered_set>
-#include <vector>
-
 #ifdef VKL_DEBUG
 constexpr bool g_bValidationLayersEnabled = true;
 #else
@@ -64,7 +58,7 @@ void VulkanApp::InitVulkan()
     CreateFramebuffer();
 
     CreateCommandPool();
-    AllocateCommandBuffer();
+    AllocateCommandBuffers();
 
     CreateSyncObjects();
 
@@ -121,24 +115,31 @@ void VulkanApp::DrawFrame()
     */
 
     // 1
-    vkWaitForFences(m_VkDevice, 1, &m_InFlightFence, VK_TRUE, UINT64_MAX);
-    vkResetFences(m_VkDevice, 1, &m_InFlightFence);
+    vkWaitForFences(m_VkDevice, 1, &m_InFlightFences[m_CurrentFrame], VK_TRUE, UINT64_MAX);
+    vkResetFences(m_VkDevice, 1, &m_InFlightFences[m_CurrentFrame]);
 
     // 2
     uint32_t SwapchainImageIndex = 0;
     vkAcquireNextImageKHR(
-        m_VkDevice, m_VkSwapchain, UINT64_MAX, m_ImageAvailableSemaphore, VK_NULL_HANDLE, &SwapchainImageIndex
+        m_VkDevice,
+        m_VkSwapchain,
+        UINT64_MAX,
+        m_ImageAvailableSemaphores[m_CurrentFrame],
+        VK_NULL_HANDLE,
+        &SwapchainImageIndex
     );
 
     // 3
-    vkResetCommandBuffer(m_VkCommandBuffer, 0);
-    RecordCommandBuffer(m_VkCommandBuffer, SwapchainImageIndex);
+    vkResetCommandBuffer(m_VkCommandBuffers[m_CurrentFrame], 0);
+    RecordCommandBuffer(m_VkCommandBuffers[m_CurrentFrame], SwapchainImageIndex);
 
     // 4
-    SubmitCommandBuffer(m_VkCommandBuffer);
+    SubmitCommandBuffer(m_VkCommandBuffers[m_CurrentFrame]);
 
     // 5
     PresentResult(SwapchainImageIndex);
+
+    m_CurrentFrame = (m_CurrentFrame + 1) % s_FramesInFlight;
 }
 
 void VulkanApp::CreateVkInstance()
@@ -1522,15 +1523,15 @@ void VulkanApp::DestroyCommandPool()
     VKL_TRACE("VkCommandPool destroyed");
 }
 
-void VulkanApp::AllocateCommandBuffer()
+void VulkanApp::AllocateCommandBuffers()
 {
     VkCommandBufferAllocateInfo CommandBufferInfo{};
     CommandBufferInfo.sType              = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
     CommandBufferInfo.commandPool        = m_VkCommandPool;
     CommandBufferInfo.level              = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    CommandBufferInfo.commandBufferCount = 1;
+    CommandBufferInfo.commandBufferCount = static_cast<uint32_t>(m_VkCommandBuffers.size());
 
-    if (vkAllocateCommandBuffers(m_VkDevice, &CommandBufferInfo, &m_VkCommandBuffer) != VK_SUCCESS)
+    if (vkAllocateCommandBuffers(m_VkDevice, &CommandBufferInfo, m_VkCommandBuffers.data()) != VK_SUCCESS)
     {
         VKL_CRITICAL("Failed to allocate VkCommandBuffer!");
         exit(1);
@@ -1592,10 +1593,10 @@ void VulkanApp::RecordCommandBuffer(VkCommandBuffer CommandBuffer, uint32_t Swap
 
 void VulkanApp::SubmitCommandBuffer(VkCommandBuffer CommandBuffer)
 {
-    VkSemaphore          WaitSemaphores[] = {m_ImageAvailableSemaphore};
+    VkSemaphore          WaitSemaphores[] = {m_ImageAvailableSemaphores[m_CurrentFrame]};
     VkPipelineStageFlags WaitStages[]     = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
 
-    VkSemaphore SignalSemaphores[] = {m_RenderFinishedSemaphore};
+    VkSemaphore SignalSemaphores[] = {m_RenderFinishedSemaphores[m_CurrentFrame]};
 
     VkSubmitInfo SubmitInfo{};
     SubmitInfo.sType                = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -1607,7 +1608,7 @@ void VulkanApp::SubmitCommandBuffer(VkCommandBuffer CommandBuffer)
     SubmitInfo.signalSemaphoreCount = 1;
     SubmitInfo.pSignalSemaphores    = SignalSemaphores;
 
-    if (vkQueueSubmit(m_GraphicsQueue, 1, &SubmitInfo, m_InFlightFence) != VK_SUCCESS)
+    if (vkQueueSubmit(m_GraphicsQueue, 1, &SubmitInfo, m_InFlightFences[m_CurrentFrame]) != VK_SUCCESS)
     {
         VKL_CRITICAL("Failed to submit draw commands buffer!");
         exit(1);
@@ -1618,7 +1619,7 @@ void VulkanApp::PresentResult(uint32_t SwapchainImageIndex)
 {
     VkSwapchainKHR Swapchains[] = {m_VkSwapchain};
 
-    VkSemaphore WaitSemaphores[] = {m_RenderFinishedSemaphore};
+    VkSemaphore WaitSemaphores[] = {m_RenderFinishedSemaphores[m_CurrentFrame]};
 
     VkPresentInfoKHR PresentInfo{};
     PresentInfo.sType              = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
@@ -1634,32 +1635,40 @@ void VulkanApp::PresentResult(uint32_t SwapchainImageIndex)
 
 void VulkanApp::CreateSyncObjects()
 {
-    VkSemaphoreCreateInfo ImageAvailableSemaphoreInfo{};
-    ImageAvailableSemaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-
-    VkSemaphoreCreateInfo RenderFinishedSemaphoreInfo{};
-    RenderFinishedSemaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-
-    VkFenceCreateInfo InFlightFenceInfo{};
-    InFlightFenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-    InFlightFenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
-
-    if (vkCreateSemaphore(m_VkDevice, &ImageAvailableSemaphoreInfo, nullptr, &m_ImageAvailableSemaphore) !=
-            VK_SUCCESS ||
-        vkCreateSemaphore(m_VkDevice, &RenderFinishedSemaphoreInfo, nullptr, &m_RenderFinishedSemaphore) !=
-            VK_SUCCESS ||
-        vkCreateFence(m_VkDevice, &InFlightFenceInfo, nullptr, &m_InFlightFence) != VK_SUCCESS)
+    for (uint32_t i = 0; i < s_FramesInFlight; ++i)
     {
-        VKL_CRITICAL("Failed to create Syncronization objects!");
-        exit(1);
+        VkSemaphoreCreateInfo ImageAvailableSemaphoreInfo{};
+        ImageAvailableSemaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+
+        VkSemaphoreCreateInfo RenderFinishedSemaphoreInfo{};
+        RenderFinishedSemaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+
+        VkFenceCreateInfo InFlightFenceInfo{};
+        InFlightFenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+        InFlightFenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+
+        if (vkCreateSemaphore(
+                m_VkDevice, &ImageAvailableSemaphoreInfo, nullptr, &m_ImageAvailableSemaphores[i]
+            ) != VK_SUCCESS ||
+            vkCreateSemaphore(
+                m_VkDevice, &RenderFinishedSemaphoreInfo, nullptr, &m_RenderFinishedSemaphores[i]
+            ) != VK_SUCCESS ||
+            vkCreateFence(m_VkDevice, &InFlightFenceInfo, nullptr, &m_InFlightFences[i]) != VK_SUCCESS)
+        {
+            VKL_CRITICAL("Failed to create Syncronization objects!");
+            exit(1);
+        }
     }
     VKL_TRACE("Created Syncronization objects successfully");
 }
 
 void VulkanApp::DestroySyncObjects()
 {
-    vkDestroySemaphore(m_VkDevice, m_ImageAvailableSemaphore, nullptr);
-    vkDestroySemaphore(m_VkDevice, m_RenderFinishedSemaphore, nullptr);
-    vkDestroyFence(m_VkDevice, m_InFlightFence, nullptr);
+    for (uint32_t i = 0; i < s_FramesInFlight; ++i)
+    {
+        vkDestroySemaphore(m_VkDevice, m_ImageAvailableSemaphores[i], nullptr);
+        vkDestroySemaphore(m_VkDevice, m_RenderFinishedSemaphores[i], nullptr);
+        vkDestroyFence(m_VkDevice, m_InFlightFences[i], nullptr);
+    }
     VKL_TRACE("Syncronization objects destroyed");
 }

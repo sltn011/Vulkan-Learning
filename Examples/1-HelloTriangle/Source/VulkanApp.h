@@ -6,7 +6,13 @@
 #include "SwapchainSupportDetails.h"
 #include "Window.h"
 
+#include <array>
+#include <cstdint>
 #include <filesystem>
+#include <fstream>
+#include <string>
+#include <unordered_set>
+#include <vector>
 
 // Vulkan Header
 #include <vulkan/vulkan.h>
@@ -26,6 +32,11 @@ private:
     void DrawFrame();
 
 private:
+    Window m_Window;
+
+    uint32_t                  m_CurrentFrame   = 0;
+    static constexpr uint32_t s_FramesInFlight = 2;
+
     // Vulkan-specific methods
     //=========================================================================================================
     // VK_INSTANCE_RELATED
@@ -210,7 +221,7 @@ private:
     void CreateCommandPool();
     void DestroyCommandPool();
 
-    void AllocateCommandBuffer();
+    void AllocateCommandBuffers();
 
     void RecordCommandBuffer(VkCommandBuffer CommandBuffer, uint32_t SwapchainImageIndex);
     void SubmitCommandBuffer(VkCommandBuffer CommandBuffer);
@@ -223,8 +234,6 @@ private:
     // !VK_SYNC
 
 private:
-    Window m_Window;
-
     VkInstance m_VkInstance{};
 
     VkPhysicalDevice   m_VkPhysicalDevice{};
@@ -247,12 +256,13 @@ private:
 
     std::vector<VkFramebuffer> m_VkFramebuffers;
 
-    VkCommandPool   m_VkCommandPool{};
-    VkCommandBuffer m_VkCommandBuffer{};
+    VkCommandPool m_VkCommandPool{};
 
-    VkSemaphore m_ImageAvailableSemaphore{};
-    VkSemaphore m_RenderFinishedSemaphore{};
-    VkFence     m_InFlightFence{};
+    std::array<VkCommandBuffer, s_FramesInFlight> m_VkCommandBuffers{};
+
+    std::array<VkSemaphore, s_FramesInFlight> m_ImageAvailableSemaphores{};
+    std::array<VkSemaphore, s_FramesInFlight> m_RenderFinishedSemaphores{};
+    std::array<VkFence, s_FramesInFlight>     m_InFlightFences{};
 
     VkDebugUtilsMessengerEXT m_VkDebugMessenger{};
 };
