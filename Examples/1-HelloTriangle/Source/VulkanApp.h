@@ -37,6 +37,11 @@ private:
     uint32_t                  m_CurrentFrame   = 0;
     static constexpr uint32_t s_FramesInFlight = 2;
 
+    // VK_ERROR_OUT_OF_DATE_KHR not guaranteed
+    bool m_bWindowResizeHappened = false;
+
+    static void OnWindowResized(GLFWwindow *Window, int NewWidth, int NewHeight);
+
     // Vulkan-specific methods
     //=========================================================================================================
     // VK_INSTANCE_RELATED
@@ -147,6 +152,8 @@ private:
     void CreateSwapchain();
     void DestroySwapchain();
 
+    void RecreateSwapchain();
+
     void RetrieveSwapchainImages();
     // !VK_KHR_SWAPCHAIN
     //=========================================================================================================
@@ -213,8 +220,8 @@ private:
     // !VK_SPIRV_SHADER
     //=========================================================================================================
     // VK_FRAMEBUFFER
-    void CreateFramebuffer();
-    void DestroyFramebuffer();
+    void CreateFramebuffers();
+    void DestroyFramebuffers();
     // !VK_FRAMEBUFFER
     //=========================================================================================================
     // VK_COMMAND_BUFFER
@@ -223,9 +230,9 @@ private:
 
     void AllocateCommandBuffers();
 
-    void RecordCommandBuffer(VkCommandBuffer CommandBuffer, uint32_t SwapchainImageIndex);
-    void SubmitCommandBuffer(VkCommandBuffer CommandBuffer);
-    void PresentResult(uint32_t SwapchainImageIndex);
+    void     RecordCommandBuffer(VkCommandBuffer CommandBuffer, uint32_t SwapchainImageIndex);
+    void     SubmitCommandBuffer(VkCommandBuffer CommandBuffer);
+    VkResult PresentResult(uint32_t SwapchainImageIndex);
     // !VK_COMMAND_BUFFER
     //=========================================================================================================
     // VK_SYNC

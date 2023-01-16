@@ -23,7 +23,7 @@ Window::Window(int Width, int Height, char const *Title) : m_Title{Title}
     s_NumInstances++;
 
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API); // no need to create OpenGL context for Vulkan
-    glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);   // needs more complex logic than needed here
+                                                  // needs more complex logic than needed here
     m_Window = glfwCreateWindow(Width, Height, m_Title, nullptr, nullptr);
     if (!m_Window)
     {

@@ -15,6 +15,9 @@ constexpr bool g_bValidationLayersEnabled = false;
 VulkanApp::VulkanApp(int const WindowWidth, int const WindowHeight)
     : m_Window(WindowWidth, WindowHeight, "1-HelloTriangle")
 {
+    glfwSetWindowUserPointer(m_Window.Get(), this);
+    glfwSetFramebufferSizeCallback(m_Window.Get(), OnWindowResized);
+
     VKL_INFO("VulkanApp created");
 }
 
@@ -55,7 +58,7 @@ void VulkanApp::InitVulkan()
     CreatePipelineLayout();
     CreatePipeline();
 
-    CreateFramebuffer();
+    CreateFramebuffers();
 
     CreateCommandPool();
     AllocateCommandBuffers();
@@ -85,7 +88,7 @@ void VulkanApp::CleanUp()
 
     DestroyCommandPool();
 
-    DestroyFramebuffer();
+    DestroyFramebuffers();
 
     DestroyPipeline();
     DestroyPipelineLayout();
@@ -116,11 +119,10 @@ void VulkanApp::DrawFrame()
 
     // 1
     vkWaitForFences(m_VkDevice, 1, &m_InFlightFences[m_CurrentFrame], VK_TRUE, UINT64_MAX);
-    vkResetFences(m_VkDevice, 1, &m_InFlightFences[m_CurrentFrame]);
 
     // 2
     uint32_t SwapchainImageIndex = 0;
-    vkAcquireNextImageKHR(
+    VkResult AcquisitionResult   = vkAcquireNextImageKHR(
         m_VkDevice,
         m_VkSwapchain,
         UINT64_MAX,
@@ -128,6 +130,21 @@ void VulkanApp::DrawFrame()
         VK_NULL_HANDLE,
         &SwapchainImageIndex
     );
+    if (AcquisitionResult == VK_ERROR_OUT_OF_DATE_KHR) // swapchain not suitable now(after screen resize)
+    {
+        RecreateSwapchain();
+        return;
+    }
+    else if (AcquisitionResult != VK_SUCCESS && AcquisitionResult != VK_SUBOPTIMAL_KHR) // second - swapchain
+                                                                                        // properties not
+                                                                                        // matched exactly
+    {
+        VKL_CRITICAL("Failed to acquire swapchain image!");
+        exit(1);
+    }
+
+    // Reset fences here to avoid deadlock
+    vkResetFences(m_VkDevice, 1, &m_InFlightFences[m_CurrentFrame]);
 
     // 3
     vkResetCommandBuffer(m_VkCommandBuffers[m_CurrentFrame], 0);
@@ -137,9 +154,26 @@ void VulkanApp::DrawFrame()
     SubmitCommandBuffer(m_VkCommandBuffers[m_CurrentFrame]);
 
     // 5
-    PresentResult(SwapchainImageIndex);
+    VkResult QueuePresentResult = PresentResult(SwapchainImageIndex);
+    if (QueuePresentResult == VK_ERROR_OUT_OF_DATE_KHR || QueuePresentResult == VK_SUBOPTIMAL_KHR ||
+        m_bWindowResizeHappened)
+    {
+        RecreateSwapchain();
+        m_bWindowResizeHappened = false;
+    }
+    else if (QueuePresentResult != VK_SUCCESS)
+    {
+        VKL_CRITICAL("Failed to present swapchain image!");
+        exit(1);
+    }
 
     m_CurrentFrame = (m_CurrentFrame + 1) % s_FramesInFlight;
+}
+
+void VulkanApp::OnWindowResized(GLFWwindow *Window, int NewWidth, int NewHeight)
+{
+    VulkanApp *App               = static_cast<VulkanApp *>(glfwGetWindowUserPointer(Window));
+    App->m_bWindowResizeHappened = true;
 }
 
 void VulkanApp::CreateVkInstance()
@@ -1054,6 +1088,28 @@ void VulkanApp::DestroySwapchain()
     VKL_TRACE("VkSwapchain destroyed");
 }
 
+void VulkanApp::RecreateSwapchain()
+{
+    // Handle minimized window event
+    std::pair<int, int> WindowFramebufferSize = m_Window.GetFramebufferSize();
+    while (WindowFramebufferSize.first == 0 || WindowFramebufferSize.second == 0)
+    {
+        WindowFramebufferSize = m_Window.GetFramebufferSize();
+        glfwWaitEvents();
+    }
+
+    vkDeviceWaitIdle(m_VkDevice);
+
+    DestroyFramebuffers();
+    DestroySwapchainImagesViews();
+    DestroySwapchain();
+
+    CreateSwapchain();
+    RetrieveSwapchainImages();
+    CreateSwapchainImagesViews();
+    CreateFramebuffers();
+}
+
 void VulkanApp::RetrieveSwapchainImages()
 {
     uint32_t SwapchainImagesCount = 0;
@@ -1467,7 +1523,7 @@ void VulkanApp::DestroyShaderModule(VkShaderModule ShaderModule) const
     vkDestroyShaderModule(m_VkDevice, ShaderModule, nullptr);
 }
 
-void VulkanApp::CreateFramebuffer()
+void VulkanApp::CreateFramebuffers()
 {
     m_VkFramebuffers.resize(m_SwapchainImagesViews.size());
 
@@ -1493,7 +1549,7 @@ void VulkanApp::CreateFramebuffer()
     VKL_TRACE("Created VkFramebuffers successfully");
 }
 
-void VulkanApp::DestroyFramebuffer()
+void VulkanApp::DestroyFramebuffers()
 {
     for (size_t i = 0; i < m_VkFramebuffers.size(); ++i)
     {
@@ -1536,7 +1592,7 @@ void VulkanApp::AllocateCommandBuffers()
         VKL_CRITICAL("Failed to allocate VkCommandBuffer!");
         exit(1);
     }
-    VKL_TRACE("Allocated VkCommandBuffer successfully");
+    VKL_TRACE("Allocated VkCommandBuffers successfully");
 }
 
 void VulkanApp::RecordCommandBuffer(VkCommandBuffer CommandBuffer, uint32_t SwapchainImageIndex)
@@ -1615,7 +1671,7 @@ void VulkanApp::SubmitCommandBuffer(VkCommandBuffer CommandBuffer)
     }
 }
 
-void VulkanApp::PresentResult(uint32_t SwapchainImageIndex)
+VkResult VulkanApp::PresentResult(uint32_t SwapchainImageIndex)
 {
     VkSwapchainKHR Swapchains[] = {m_VkSwapchain};
 
@@ -1630,7 +1686,7 @@ void VulkanApp::PresentResult(uint32_t SwapchainImageIndex)
     PresentInfo.pImageIndices      = &SwapchainImageIndex;
     PresentInfo.pResults           = nullptr;
 
-    vkQueuePresentKHR(m_GraphicsQueue, &PresentInfo);
+    return vkQueuePresentKHR(m_GraphicsQueue, &PresentInfo);
 }
 
 void VulkanApp::CreateSyncObjects()
