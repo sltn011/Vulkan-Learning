@@ -843,9 +843,9 @@ std::vector<char const *> VulkanApp::GetRequiredDeviceValidationLayers() const
 void VulkanApp::RetrieveQueuesFromDevice()
 {
     uint32_t QueueIndex = 0;
-    vkGetDeviceQueue(m_VkDevice, m_QueueFamilyIndices.GraphicsFamily.value(), QueueIndex, &m_GraphicsQueue);
+    vkGetDeviceQueue(m_VkDevice, m_QueueFamilyIndices.GraphicsFamily.value(), QueueIndex, &m_VkGraphicsQueue);
     vkGetDeviceQueue(
-        m_VkDevice, m_QueueFamilyIndices.PresentationFamily.value(), QueueIndex, &m_PresentationQueue
+        m_VkDevice, m_QueueFamilyIndices.PresentationFamily.value(), QueueIndex, &m_VkPresentationQueue
     );
 
     VKL_TRACE("Retrieved VkQueues from VkDevice");
@@ -1664,7 +1664,7 @@ void VulkanApp::SubmitCommandBuffer(VkCommandBuffer CommandBuffer)
     SubmitInfo.signalSemaphoreCount = 1;
     SubmitInfo.pSignalSemaphores    = SignalSemaphores;
 
-    if (vkQueueSubmit(m_GraphicsQueue, 1, &SubmitInfo, m_InFlightFences[m_CurrentFrame]) != VK_SUCCESS)
+    if (vkQueueSubmit(m_VkGraphicsQueue, 1, &SubmitInfo, m_InFlightFences[m_CurrentFrame]) != VK_SUCCESS)
     {
         VKL_CRITICAL("Failed to submit draw commands buffer!");
         exit(1);
@@ -1686,7 +1686,7 @@ VkResult VulkanApp::PresentResult(uint32_t SwapchainImageIndex)
     PresentInfo.pImageIndices      = &SwapchainImageIndex;
     PresentInfo.pResults           = nullptr;
 
-    return vkQueuePresentKHR(m_GraphicsQueue, &PresentInfo);
+    return vkQueuePresentKHR(m_VkGraphicsQueue, &PresentInfo);
 }
 
 void VulkanApp::CreateSyncObjects()

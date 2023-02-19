@@ -214,8 +214,19 @@ private:
     // !VK_FRAMEBUFFER
     //=========================================================================================================
     // VK_BUFFER
+    void CreateBuffer(
+        VkBuffer             &Buffer,
+        VkDeviceMemory       &BufferMemory,
+        VkBufferUsageFlags    Usage,
+        VkDeviceSize          Size,
+        VkMemoryPropertyFlags Properties
+    );
+    void DestroyBuffer(VkBuffer &Buffer, VkDeviceMemory &BufferMemory);
+
     void CreateVertexBuffer();
     void DestroyVertexBuffer();
+
+    void TransferBufferData(VkBuffer Source, VkBuffer Destination, VkDeviceSize Size);
     // !VK_BUFFER
     //=========================================================================================================
     // VK_COMMAND_BUFFER
@@ -241,8 +252,8 @@ private:
     QueueFamilyIndices m_QueueFamilyIndices{};
 
     VkDevice m_VkDevice{};
-    VkQueue  m_GraphicsQueue{};
-    VkQueue  m_PresentationQueue{};
+    VkQueue  m_VkGraphicsQueue{};
+    VkQueue  m_VkPresentationQueue{};
 
     VkSurfaceKHR             m_VkSurface{};
     VkSwapchainKHR           m_VkSwapchain{};
@@ -264,6 +275,7 @@ private:
     VkDeviceMemory                                   m_VkVertexBufferMemory;
 
     VkCommandPool m_VkCommandPool{};
+    VkCommandPool m_VkTransferCommandPool;
 
     std::array<VkCommandBuffer, s_FramesInFlight> m_VkCommandBuffers{};
 

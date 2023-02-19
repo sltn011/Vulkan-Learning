@@ -247,8 +247,8 @@ private:
     QueueFamilyIndices m_QueueFamilyIndices{};
 
     VkDevice m_VkDevice{};
-    VkQueue  m_GraphicsQueue{};
-    VkQueue  m_PresentationQueue{};
+    VkQueue  m_VkGraphicsQueue{};
+    VkQueue  m_VkPresentationQueue{};
 
     VkSurfaceKHR             m_VkSurface{};
     VkSwapchainKHR           m_VkSwapchain{};
