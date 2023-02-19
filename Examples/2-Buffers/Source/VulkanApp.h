@@ -226,6 +226,9 @@ private:
     void CreateVertexBuffer();
     void DestroyVertexBuffer();
 
+    void CreateIndexBuffer();
+    void DestroyIndexBuffer();
+
     void TransferBufferData(VkBuffer Source, VkBuffer Destination, VkDeviceSize Size);
     // !VK_BUFFER
     //=========================================================================================================
@@ -273,6 +276,10 @@ private:
     std::array<VkVertexInputAttributeDescription, 2> m_VertexInputAttributeDescriptions;
     VkBuffer                                         m_VkVertexBuffer;
     VkDeviceMemory                                   m_VkVertexBufferMemory;
+
+    std::vector<uint16_t> m_Indices;
+    VkBuffer              m_VkIndexBuffer;
+    VkDeviceMemory        m_VkIndexBufferMemory;
 
     VkCommandPool m_VkCommandPool{};
     VkCommandPool m_VkTransferCommandPool;

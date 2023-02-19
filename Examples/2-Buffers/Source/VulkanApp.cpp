@@ -60,6 +60,7 @@ void VulkanApp::InitVulkan()
     CreateCommandPool();
 
     CreateVertexBuffer();
+    CreateIndexBuffer();
 
     AllocateCommandBuffers();
 
@@ -88,6 +89,7 @@ void VulkanApp::CleanUp()
 
     DestroyCommandPool();
 
+    DestroyIndexBuffer();
     DestroyVertexBuffer();
 
     DestroyFramebuffers();
@@ -1509,9 +1511,10 @@ void VulkanApp::CreateVertexBuffer()
 {
     // clang-format off
     m_Vertices = {
-        {{ 0.0f, -0.5f}, {1.0f, 1.0f, 1.0f}},
-        {{-0.5f,  0.5f}, {0.0f, 1.0f, 1.0f}},
+        {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+        {{-0.5f,  0.5f}, {0.0f, 1.0f, 0.0f}},
         {{ 0.5f,  0.5f}, {0.0f, 0.0f, 1.0f}},
+        {{ 0.5f, -0.5f}, {1.0f, 1.0f, 0.0f}},
     };
     // clang-format on
 
@@ -1549,6 +1552,47 @@ void VulkanApp::CreateVertexBuffer()
 void VulkanApp::DestroyVertexBuffer()
 {
     DestroyBuffer(m_VkVertexBuffer, m_VkVertexBufferMemory);
+}
+
+void VulkanApp::CreateIndexBuffer()
+{
+    m_Indices = {0, 1, 2, 0, 2, 3};
+
+    VkDeviceSize BufferSize = static_cast<VkDeviceSize>(sizeof(m_Indices[0]) * m_Indices.size());
+
+    VkBuffer       StagingBuffer{};
+    VkDeviceMemory StagingBufferMemory{};
+
+    CreateBuffer(
+        StagingBuffer,
+        StagingBufferMemory,
+        VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        BufferSize,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+    );
+
+    void *StagingBufferData = nullptr;
+    vkMapMemory(m_VkDevice, StagingBufferMemory, 0, BufferSize, 0, &StagingBufferData);
+    std::memcpy(StagingBufferData, m_Indices.data(), static_cast<size_t>(BufferSize));
+    vkUnmapMemory(m_VkDevice, StagingBufferMemory);
+
+    CreateBuffer(
+        m_VkIndexBuffer,
+        m_VkIndexBufferMemory,
+        VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+        BufferSize,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+    );
+
+    TransferBufferData(StagingBuffer, m_VkIndexBuffer, BufferSize);
+
+    DestroyBuffer(StagingBuffer, StagingBufferMemory);
+}
+
+void VulkanApp::DestroyIndexBuffer()
+{
+    vkDestroyBuffer(m_VkDevice, m_VkIndexBuffer, nullptr);
+    vkFreeMemory(m_VkDevice, m_VkIndexBufferMemory, nullptr);
 }
 
 void VulkanApp::TransferBufferData(VkBuffer Source, VkBuffer Destination, VkDeviceSize Size)
@@ -1686,7 +1730,9 @@ void VulkanApp::RecordCommandBuffer(VkCommandBuffer CommandBuffer, uint32_t Swap
         VkDeviceSize Offsets[] = {0};
         vkCmdBindVertexBuffers(CommandBuffer, 0, 1, Buffers, Offsets);
 
-        vkCmdDraw(CommandBuffer, static_cast<uint32_t>(m_Vertices.size()), 1, 0, 0);
+        vkCmdBindIndexBuffer(CommandBuffer, m_VkIndexBuffer, 0, VK_INDEX_TYPE_UINT16);
+
+        vkCmdDrawIndexed(CommandBuffer, static_cast<uint32_t>(m_Indices.size()), 1, 0, 0, 0);
     }
     vkCmdEndRenderPass(CommandBuffer);
 
