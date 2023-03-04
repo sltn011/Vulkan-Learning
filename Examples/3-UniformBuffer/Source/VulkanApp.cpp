@@ -2,6 +2,7 @@
 
 #include "MatricesUBO.h"
 #include "Utils.h"
+#include "glm/gtc/matrix_transform.hpp"
 
 #include <chrono>
 
@@ -1276,7 +1277,7 @@ VkPipelineRasterizationStateCreateInfo VulkanApp::GetRasterizerStateInfo() const
     RasterizerStageInfo.polygonMode             = VK_POLYGON_MODE_FILL;
     RasterizerStageInfo.lineWidth               = 1.0f;
     RasterizerStageInfo.cullMode                = VK_CULL_MODE_BACK_BIT;
-    RasterizerStageInfo.frontFace               = VK_FRONT_FACE_CLOCKWISE;
+    RasterizerStageInfo.frontFace               = VK_FRONT_FACE_COUNTER_CLOCKWISE;
     RasterizerStageInfo.depthBiasEnable         = VK_FALSE;
     RasterizerStageInfo.depthBiasConstantFactor = 0.0f; // optional
     RasterizerStageInfo.depthBiasClamp          = 0.0f; // optional
@@ -1582,10 +1583,14 @@ void VulkanApp::CreateVertexBuffer()
 {
     // clang-format off
     m_Vertices = {
-        {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
-        {{-0.5f,  0.5f}, {0.0f, 1.0f, 0.0f}},
-        {{ 0.5f,  0.5f}, {0.0f, 0.0f, 1.0f}},
-        {{ 0.5f, -0.5f}, {1.0f, 1.0f, 0.0f}},
+        {{ 1.0f,  1.0f, -1.0f}, {1.0f, 0.0f, 0.0f}},
+        {{ 1.0f, -1.0f, -1.0f}, {0.0f, 1.0f, 0.0f}},
+        {{ 1.0f,  1.0f,  1.0f}, {0.0f, 0.0f, 1.0f}},
+        {{ 1.0f, -1.0f,  1.0f}, {1.0f, 1.0f, 0.0f}},
+        {{-1.0f,  1.0f, -1.0f}, {1.0f, 0.0f, 1.0f}},
+        {{-1.0f, -1.0f, -1.0f}, {0.0f, 1.0f, 1.0f}},
+        {{-1.0f,  1.0f,  1.0f}, {1.0f, 1.0f, 1.0f}},
+        {{-1.0f, -1.0f,  1.0f}, {0.2f, 0.2f, 0.2f}}
     };
     // clang-format on
 
@@ -1627,7 +1632,22 @@ void VulkanApp::DestroyVertexBuffer()
 
 void VulkanApp::CreateIndexBuffer()
 {
-    m_Indices = {0, 1, 2, 0, 2, 3};
+    // clang-format off
+    m_Indices = {
+        4, 2, 0,
+        2, 7, 3,
+        6, 5, 7,
+        1, 7, 5,
+        0, 3, 1,
+        4, 1, 5,
+        4, 6, 2,
+        2, 6, 7,
+        6, 4, 5,
+        1, 3, 7,
+        0, 2, 3,
+        4, 0, 1
+    };
+    // clang-format on
 
     VkDeviceSize BufferSize = static_cast<VkDeviceSize>(sizeof(m_Indices[0]) * m_Indices.size());
 
@@ -1769,8 +1789,12 @@ void VulkanApp::UpdateUniformBuffers()
     // But this flips CW and CCW polygon rotation
     CameraProjection[1][1] *= -1;
 
+    glm::mat4 ModelMatrix =
+        glm::rotate(glm::mat4(1.0f), static_cast<float>(glfwGetTime()), glm::vec3{1.0f, 0.5f, 0.2f});
+    ModelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3{0.0f, 0.0f, -3.0f}) * ModelMatrix;
+
     MatricesUBO UBOData{};
-    UBOData.Model          = glm::mat4(1.0f);
+    UBOData.Model          = ModelMatrix;
     UBOData.ProjectionView = CameraProjection * CameraView;
 
     std::memcpy(m_MatricesUBOsMappedMemory[m_CurrentFrame], &UBOData, sizeof(UBOData));

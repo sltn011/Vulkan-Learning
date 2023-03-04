@@ -14,7 +14,7 @@ std::array<VkVertexInputAttributeDescription, 2> Vertex::GetInputAttributeDescri
     VkVertexInputAttributeDescription PositionAttribute{};
     PositionAttribute.binding  = 0;
     PositionAttribute.location = 0;
-    PositionAttribute.format   = VK_FORMAT_R32G32_SFLOAT;
+    PositionAttribute.format   = VK_FORMAT_R32G32B32_SFLOAT;
     PositionAttribute.offset   = offsetof(Vertex, Position);
 
     VkVertexInputAttributeDescription ColorAttribute{};
